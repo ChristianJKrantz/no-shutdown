@@ -1,0 +1,111 @@
+// Unit tests for the IOS simulator (node tests/test_ios.js)
+const I=require('../ios.js');
+let fails=0,n=0;const ok=(c,m)=>{n++;if(!c){fails++;console.log('  ✗ '+m);}else console.log('  ✓ '+m);};
+const say=(d,cmds,net)=>{let o=[];cmds.forEach(c=>{o=o.concat(I.run(d,c,net));});return o.map(x=>x.t).join('\n');};
+const R=()=>I.newDevice('router','R1'),SW=()=>I.newDevice('switch','S1');
+
+console.log('Modes and abbreviations');
+let r=R();say(r,['en']);ok(r.mode==='priv'&&I.prompt(r)==='R1#','en → privileged EXEC');
+say(r,['conf t']);ok(r.mode==='config'&&I.prompt(r)==='R1(config)#','conf t → global config');
+say(r,['int gigabitethernet 0/1']);ok(r.mode==='if'&&r.ctx==='GigabitEthernet0/1','“int gigabitethernet 0/1” (with a space) selects G0/1');
+say(r,['exit']);ok(r.mode==='config','exit goes up one level');
+say(r,['line con 0','end']);ok(r.mode==='priv','end goes straight to privileged EXEC');
+say(r,['conf t','int g0/0','^Z']);ok(r.mode==='priv','Ctrl+Z works like end');
+say(r,['disable']);ok(r.mode==='user','disable goes back to user EXEC');
+r=R();let o=say(r,['en','co']);ok(/Ambiguous command/.test(o),'“co” is ambiguous (configure/copy)');
+o=say(r,['conf']);ok(/Incomplete command/.test(o),'“conf” alone is incomplete');
+o=say(r,['conf t','hostnme R2']);ok(/\^\n% Invalid input detected at '\^' marker\./.test(o),'a typo gets the ^ marker');
+const caret=I.run(r,'ip address 1.1.1.1')[0].t;ok(caret.indexOf('^')===I.prompt(r).length+3,'the ^ sits under the first word that doesn’t fit (“address” in global config)');
+r=R();say(r,['en','conf t']);o=say(r,['host R9']);ok(r.cfg.hostname==='R9','“host” abbreviates hostname');
+
+console.log('Teaching notes');
+r=R();o=say(r,['conf t']);ok(/enable first/.test(o)&&r.mode==='user','conf t at R1> → “type enable first”');
+o=say(r,['en','hostname X']);ok(/configure terminal first/.test(o),'a config command at R1# → “configure terminal first”');
+o=say(r,['conf t','no shutdown']);ok(/Select the interface first/.test(o),'no shutdown in global config → “select the interface first”');
+o=say(r,['password cisco']);ok(/line console 0/.test(o),'password in global config → “select the line first”');
+o=say(r,['int g0/0','ip address 192.168.1.1/24']);ok(/dotted decimal/.test(o),'a /24 mask → “dotted decimal”');
+o=say(r,['show run']);ok(/do show run/.test(o),'show run in config → “put do in front”');
+o=say(r,['ip default gateway 1.1.1.1']);ok(/default-gateway/.test(o),'“ip default gateway” → the dash');
+o=say(r,['line vty 0 15']);ok(/0 to 4/.test(o)&&r.mode!=='line','routers only have vty 0 4');
+let s=SW();o=say(s,['en','conf t','line vty 0 15']);ok(s.mode==='line'&&s.ctx==='vty','switches have vty 0 15');
+o=say(r,['int fa0/0']);ok(/GigabitEthernet/.test(o),'FastEthernet on this router → “ports are GigabitEthernet”');
+
+console.log('Interfaces');
+r=R();say(r,['en','conf t','int g0/0','ip add 10.1.1.1 255.255.255.0','no shut']);ok(r.cfg.ifaces['GigabitEthernet0/0'].ip==='10.1.1.1'&&!r.cfg.ifaces['GigabitEthernet0/0'].shutdown,'ip address + no shutdown');
+o=say(r,['int g0/1','ip address 10.1.1.9 255.255.255.0']);ok(/overlaps/.test(o)&&!r.cfg.ifaces['GigabitEthernet0/1'].ip,'overlapping subnets are refused');
+o=say(r,['ip address 10.2.2.0 255.255.255.0']);ok(/Bad mask/.test(o)&&/subnet \(network\) address/.test(o),'the network address is refused, with a note');
+o=say(r,['ip address 10.2.2.1 255.0.255.0']);ok(/Bad mask/.test(o),'a non-contiguous mask is refused');
+say(r,['hostname R7']);ok(r.mode==='config'&&r.cfg.hostname==='R7','a global command in interface mode works and returns to global config');
+o=say(r,['do show ip interface brief']);ok(/GigabitEthernet0\/0\s+10\.1\.1\.1\s+YES manual up\s+up/.test(o)&&/GigabitEthernet0\/1\s+unassigned.*administratively down/.test(o),'do show ip interface brief shows addresses and status');
+ok(r.mode==='config','do keeps you in the mode you were in');
+say(r,['int g0/0','shutdown']);ok(r.cfg.ifaces['GigabitEthernet0/0'].shutdown,'shutdown turns it off');
+say(r,['description Bldg 1 Room 106','ipv6 address 2001:db8:acad:1::1/64','ipv6 address fe80::1 link-local']);
+ok(r.cfg.ifaces['GigabitEthernet0/0'].desc==='Bldg 1 Room 106'&&r.cfg.ifaces['GigabitEthernet0/0'].ipv6[0]==='2001:db8:acad:1::1/64'&&r.cfg.ifaces['GigabitEthernet0/0'].ll==='fe80::1','description, IPv6 and link-local');
+
+console.log('Passwords and security');
+r=R();say(r,['en','conf t','enable secret class','line con 0','password cisco','login','line vty 0 4','password cisco','login','service password-encryption','end']);
+o=say(r,['show running-config']);ok(/enable secret 5 \$1\$/.test(o)&&/line con 0\n password 7 [0-9A-F]+\n login/.test(o)&&/service password-encryption/.test(o)&&!/cisco/.test(o),'show run hides the passwords (secret 5, type 7)');
+o=say(r,['show run | include password']);ok(o.trim().split('\n').length===3&&/service password-encryption/.test(o),'show run | include filters lines');
+say(r,['disable']);let p=I.run(r,'enable');ok(r.pending&&r.pending.prompt==='Password:'&&r.pending.mask,'enable asks for the secret');
+o=say(r,['wrong']);ok(r.mode==='user'&&/Access denied/.test(o),'a wrong secret is refused');
+say(r,['en','class']);ok(r.mode==='priv','the right secret works');
+say(r,['exit']);ok(r.pending&&r.pending.prompt==='Password:','after exit, the console asks for its password');
+say(r,['nope']);ok(r.pending,'a wrong console password asks again');say(r,['cisco']);ok(!r.pending&&r.mode==='user','the console password lets you in');
+r=R();say(r,['en','conf t','security passwords min-length 8']);o=say(r,['enable secret short']);ok(/too short/.test(o)&&r.cfg.enableSecret==null,'min-length 8 refuses a short secret');
+say(r,['login block-for 120 attempts 3 within 60','line vty 0 4','exec-timeout 5 0']);ok(r.cfg.blockFor.time===120&&r.cfg.lines.vty.execTimeout.join()=='5,0','login block-for and exec-timeout');
+o=say(r,['end','show run']);ok(/login block-for 120 attempts 3 within 60/.test(o)&&/exec-timeout 5 0/.test(o)&&/security passwords min-length 8/.test(o),'they show in the running config');
+s=SW();say(s,['en','conf t','banner motd $']);ok(s.pending,'a banner without its closing delimiter keeps reading lines');
+say(s,['Authorized users','only$']);ok(s.cfg.banner==='Authorized users\nonly','…until the delimiter');
+say(s,['banner motd #Keep out#']);ok(s.cfg.banner==='Keep out','a one-line banner');
+
+console.log('Help and completion');
+r=R();o=say(r,['?']);ok(/enable\s+Turn on privileged commands/.test(o)&&/ping/.test(o),'? at R1> lists the commands');
+o=say(r,['en','sh ?']);ok(/running-config/.test(o)&&/version/.test(o),'“sh ?” lists what can follow show');
+o=say(r,['co?']);ok(/configure\s+copy/.test(o),'“co?” lists matching words');
+o=say(r,['conf t','int g0/0','ip address ?']);ok(/A\.B\.C\.D/.test(o),'“ip address ?” asks for A.B.C.D');
+o=say(r,['ip address 1.1.1.1 255.0.0.0 ?']);ok(/<cr>/.test(o),'<cr> when the command is complete');
+ok(I.complete('priv','conf',r)==='configure '&&I.complete('priv','sh ip int br',r)==='sh ip int brief ','Tab completes unique words');
+ok(I.complete('priv','co',r)==='co','Tab leaves ambiguous words alone');
+
+console.log('Save, erase, reload, files');
+s=SW();say(s,['en','conf t','hostname Lab-S1','end','copy run start']);ok(s.pending&&/startup-config/.test(s.pending.prompt),'copy run start asks for the destination');
+say(s,['']);ok(s.startup&&s.startup.hostname==='Lab-S1','Enter saves it');
+o=say(s,['show startup-config']);ok(/hostname Lab-S1/.test(o),'show startup-config');
+say(s,['erase startup-config','']);ok(s.startup===null&&s.erased,'erase startup-config [confirm]');
+say(s,['delete vlan.dat','','']);ok(!s.flash['vlan.dat'],'delete vlan.dat with both confirms');
+I.run(s,'reload');ok(s.pending&&/modified. Save\?/.test(s.pending.prompt),'reload after erasing asks to save');
+say(s,['no','']);ok(s.cfg.hostname==='Switch'&&s.reloads===1&&s.mode==='user','answering no reloads with the factory config');
+r=R();say(r,['en','conf t','hostname Keep','end','copy run start','','conf t','hostname Lost','end','reload','no','']);ok(r.cfg.hostname==='Keep','reload without saving brings back the saved config');
+r=R();say(r,['en','conf t','hostname B1','end','copy running-config flash:backup.cfg','']);ok(r.flashCfg['backup.cfg'],'copy run flash: makes a backup');
+o=say(r,['show flash']);ok(/backup\.cfg/.test(o),'show flash lists it');
+say(r,['conf t','hostname Oops','end','copy flash:backup.cfg running-config','']);ok(r.cfg.hostname==='B1','copy flash: running-config restores it');
+r=R();say(r,['en','conf t','config-register 0x2142','end']);o=say(r,['show version']);ok(/Configuration register is 0x2102 \(will be 0x2142 at next reload\)/.test(o),'show version shows the register change pending');
+
+console.log('Network: ping and SSH');
+const a=R(),b=SW(),pc=I.newDevice('pc','PC1'),pc2=I.newDevice('pc','PC2');const net={devices:{R1:a,S1:b,PC1:pc,PC2:pc2}};
+say(a,['en','conf t','int g0/0','ip add 192.168.1.1 255.255.255.0','no shut','int g0/1','ip add 192.168.2.1 255.255.255.0','no shut','end'],net);
+pc.ip='192.168.1.10';pc.mask='255.255.255.0';pc.gw='192.168.1.1';pc2.ip='192.168.2.10';pc2.mask='255.255.255.0';pc2.gw='192.168.2.1';
+o=say(pc2,['ping 192.168.1.10'],net);ok(/Reply from 192\.168\.1\.10/.test(o),'PC2 pings PC1 through the router');
+say(b,['en','conf t','int vlan 1','ip add 192.168.1.2 255.255.255.0','no shut','end'],net);
+o=say(pc,['ping 192.168.1.2'],net);ok(/Reply from/.test(o),'PC1 pings the switch on its own LAN');
+o=say(pc2,['ping 192.168.1.2'],net);ok(/Request timed out/.test(o),'PC2 on the other LAN can’t, until the switch has a default gateway');
+say(b,['conf t','ip default-gateway 192.168.1.1','end'],net);o=say(pc2,['ping 192.168.1.2'],net);ok(/Reply from/.test(o),'…and then it can');
+o=say(a,['ping 192.168.2.10'],net);ok(/!!!!!/.test(o),'the router pings PC2');
+pc2.gw='192.168.9.1';o=say(pc2,['ping 192.168.1.10'],net);ok(/timed out/.test(o),'a PC with a wrong gateway can’t leave its LAN');pc2.gw='192.168.2.1';
+o=say(pc,['ssh -l admin 192.168.1.2'],net);ok(/refused/.test(o),'SSH is refused before it’s set up');
+say(b,['conf t','hostname S1','ip domain-name lab.local','crypto key generate rsa','1024','ip ssh version 2','username admin secret Str0ngPass','line vty 0 15','transport input ssh','login local','end'],net);
+ok(b.cfg.rsaBits===1024&&b.cfg.sshVer===2,'RSA keys and SSH v2');
+I.run(pc,'ssh -l admin 192.168.1.2',net);ok(pc.pending&&pc.pending.prompt==='Password:','ssh asks for the password');
+o=say(pc,['wrongpass'],net);ok(/Login invalid/.test(o)&&!pc.session.length,'a wrong password is refused');
+say(pc,['ssh -l admin 192.168.1.2','Str0ngPass'],net);ok(pc.session.length===1&&I.prompt(pc)==='S1>','the right password opens a session at S1>');
+say(pc,['en','conf t'],net);ok(I.prompt(pc)==='S1(config)#'&&b.mode==='priv','the SSH session has its own mode; the console stays where it was');
+o=say(pc,['end','exit'],net);ok(!pc.session.length&&/closed by foreign host/.test(o)&&I.prompt(pc)==='C:\\>','exit closes the session');
+const nk=SW();o=say(nk,['en','conf t','hostname Switch','crypto key generate rsa']);ok(/hostname other than Switch/.test(o),'RSA keys need a hostname first');
+say(nk,['hostname X']);o=say(nk,['crypto key generate rsa']);ok(/domain-name first/.test(o),'…and a domain name');
+
+console.log('Safety');
+r=R();o=say(r,['en','conf t','hostname <img src=x onerror=alert(1)>']);ok(r.cfg.hostname==='R1'&&/Invalid input/.test(o),'a hostname with extra words is rejected, like real IOS');
+o=say(r,['banner motd #<script>alert(1)</script>#']);ok(r.cfg.banner==='<script>alert(1)</script>','banner text is stored as plain text (the page shows it with textContent)');
+let long='a'.repeat(5000);o=say(r,[long]);ok(/Invalid input/.test(o),'a huge input is just invalid');
+
+console.log(`\n${fails?fails+' failed':'all passed'} (${n} checks)`);process.exit(fails?1:0);
