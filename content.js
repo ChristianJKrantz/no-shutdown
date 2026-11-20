@@ -186,6 +186,8 @@ const TASKS=[
       G1(`Restore the backup with copy flash:${f} running-config`,h,'priv',[`copy flash:${f} running-config`,''],()=>d().restored===f&&d().cfg.hostname===h)]};}},
  {id:'scenario',title:'Subnetting Scenario, Part 2',level:'Packet Tracer lab',skills:'configure R1’s LANs · switch VLAN 1 + gateway · PC settings · verify',
   build(p){return scenario(p);}},
+ {id:'vlsm-scenario',title:'VLSM Design, Part 3',level:'Packet Tracer lab',skills:'R1 LANs with different masks · switch VLAN 1 + gateway · PC settings · verify',
+  build(p){return vlsmScenario(p);}},
 ];
 
 /* the Cisco "Subnetting Scenario" lab (11.7.5), Part 2: same addressing rules as Subnet Sprint's lab mode */
@@ -260,6 +262,37 @@ function navTo(d,where){
   return inCfg?[]:m==='priv'?['configure terminal']:['enable','configure terminal'];
 }
 function showMe(goal,d){const nav=navTo(d,goal.where);if(nav===null)return goal.cmds.slice(1);return nav.concat(goal.cmds);}
-const C={DRILLS,IDNAME,TASKS,CHEAT,scenario,pick,R,navTo,showMe};
+
+// 11.9.3 VLSM Design and Implementation, Part 3: same topology, but each LAN has its own mask and the link is a /30
+function vlsmScenario(p){
+  const base=I.ip2n(p&&p.vlsm||'192.168.72.0'),hs=String(p&&p.hosts||'50,25,12,6').split(',').map(Number),ip=x=>I.n2ip(x>>>0);
+  const hb=H=>{let h=2;while(2**h-2<H)h++;return h;},mk=h=>I.n2ip(((0xFFFFFFFF<<h)>>>0));
+  const lans=[['R1','0/0'],['R1','0/1'],['R2','0/0'],['R2','0/1']].map(([rt,g],i)=>{const h=hb(hs[i]);return {i,rt,ifc:`GigabitEthernet${g}`,short:`G${g}`,sw:`S${i+1}`,pc:`PC${i+1}`,H:hs[i],blk:2**h,mask:mk(h),p:32-h};});
+  const wan={blk:4,mask:mk(2),p:30};let at=base;
+  [...lans.slice().sort((a,b)=>b.H-a.H||a.i-b.i),wan].forEach(l=>{l.net=at;at+=l.blk;});
+  const first=l=>ip(l.net+1),last=l=>ip(l.net+l.blk-2);
+  const devs={R1:I.newDevice('router','R1',{gig:['0/0','0/1','0/2']}),R2:I.newDevice('router','R2',{gig:['0/0','0/1','0/2']})};
+  lans.forEach(l=>{devs[l.sw]=I.newDevice('switch',l.sw);devs[l.pc]=I.newDevice('pc',l.pc);});
+  const net={devices:devs,links:[['R1','Serial0/0/0','R2','Serial0/0/0']]};
+  const r1l=lans.filter(l=>l.rt==='R1'),r2l=lans.filter(l=>l.rt==='R2'),sw3=r2l[0],pc4=r2l[1],d=x=>net.devices[x];
+  preCfg(devs.R1,['hostname R1','int s0/0/0',`ip address ${first(wan)} ${wan.mask}`,'no shutdown'],net);
+  preCfg(devs.R2,['hostname R2',...r2l.flatMap(l=>[`int ${l.short.toLowerCase()}`,`ip address ${first(l)} ${l.mask}`,'no shutdown']),'int s0/0/0',`ip address ${last(wan)} ${wan.mask}`,'no shutdown'],net);
+  lans.forEach(l=>{if(l!==sw3)preCfg(devs[l.sw],[`hostname ${l.sw}`,'int vlan 1',`ip address ${ip(l.net+2)} ${l.mask}`,'no shutdown',`ip default-gateway ${first(l)}`],net);else preCfg(devs[l.sw],[`hostname ${l.sw}`],net);
+    if(l!==pc4)pcSet(devs[l.pc],last(l),l.mask,first(l));});
+  const table=[];
+  ['R1','R2'].forEach(rt=>{lans.filter(l=>l.rt===rt).forEach(l=>table.push([rt,l.short,first(l),l.mask,'N/A']));table.push([rt,'S0/0/0',rt==='R1'?first(wan):last(wan),wan.mask,'N/A']);});
+  lans.forEach(l=>table.push([l.sw,'VLAN 1',ip(l.net+2),l.mask,first(l)]));lans.forEach(l=>table.push([l.pc,'NIC',last(l),l.mask,first(l)]));
+  const goals=[];
+  r1l.forEach(l=>goals.push(G1(`R1 ${l.short}: ${first(l)} ${l.mask} (/${l.p}), turned on`,'R1',`if:${l.ifc}`,[`interface ${l.short.toLowerCase()}`,`ip address ${first(l)} ${l.mask}`,'no shutdown'],()=>has(d('R1'),l.ifc,first(l),l.mask)&&up(d('R1'),l.ifc))));
+  goals.push(G1(`${sw3.sw} VLAN 1: ${ip(sw3.net+2)} ${sw3.mask}, turned on`,sw3.sw,'if:Vlan1',['interface vlan 1',`ip address ${ip(sw3.net+2)} ${sw3.mask}`,'no shutdown'],()=>has(d(sw3.sw),'Vlan1',ip(sw3.net+2),sw3.mask)&&up(d(sw3.sw),'Vlan1')));
+  goals.push(G1(`${sw3.sw} default gateway: ${first(sw3)}`,sw3.sw,'config',[`ip default-gateway ${first(sw3)}`],()=>d(sw3.sw).cfg.defaultGw===first(sw3)));
+  goals.push(G1(`${pc4.pc}: ${last(pc4)}, mask ${pc4.mask}, gateway ${first(pc4)}`,pc4.pc,'pcip',[],()=>{const x=d(pc4.pc);return x.ip===last(pc4)&&x.mask===pc4.mask&&x.gw===first(pc4);}));
+  goals.push(G1(`Verify: from ${pc4.pc}, ping R1 ${r1l[0].short} (${first(r1l[0])})`,pc4.pc,'pc',[`ping ${first(r1l[0])}`],()=>pinged(d(pc4.pc),first(r1l[0]))));
+  goals.push(G1(`Verify: from ${pc4.pc}, ping ${r1l[1].pc} (${last(r1l[1])})`,pc4.pc,'pc',[`ping ${last(r1l[1])}`],()=>pinged(d(pc4.pc),last(r1l[1]))));
+  goals.push(G1(`Verify: from R1, ping ${sw3.sw} (${ip(sw3.net+2)})`,'R1','priv',[`ping ${ip(sw3.net+2)}`],()=>pinged(d('R1'),ip(sw3.net+2))));
+  return {net,tabs:['R1',sw3.sw,pc4.pc],intro:`Part 3 of the Cisco “VLSM Design and Implementation” lab on ${ip(base)}/24 (LANs of ${hs.join(', ')} hosts). Every subnet has its own mask, so check each one against the Addressing Table. Most of the network is already configured and routing between R1 and R2 is running. Finish the addressing and check you can reach everything.`,
+    table,tableHead:['Device','Interface','IP address','Subnet mask','Default gateway'],goals,params:{vlsm:ip(base),hosts:hs.join(',')}};
+}
+const C={DRILLS,IDNAME,TASKS,CHEAT,scenario,vlsmScenario,pick,R,navTo,showMe};
 if(typeof module!=='undefined'&&module.exports)module.exports=C;else root.CS=C;
 })(typeof window!=='undefined'?window:globalThis);

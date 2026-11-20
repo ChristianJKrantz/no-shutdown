@@ -247,16 +247,223 @@ function printLabHTML(q,num,key){
 }
 
 
+/* ---------------- 11.9.3 VLSM Design and Implementation ----------------
+   Same topology as 11.7.5 (R1 and R2, two LANs each, a serial WAN link), but every LAN gets the smallest subnet
+   that fits its own host count, biggest LAN first, and the WAN link a /30. Part 1 sizes the subnets, Part 2
+   documents the subnet table and the Addressing Table (each interface with its own subnet's mask). Part 3, the
+   configuration, is the "vlsm-scenario" task in content.js. */
+const VLSMPARTS={all:'Parts 1–2',size:'Part 1: size the subnets',design:'Part 2: subnet table & addressing'};
+const hostBits=H=>{let h=2;while(2**h-2<H)h++;return h;};
+const maskOf=p=>p?(0xFFFFFFFF<<(32-p))>>>0:0;
+const LANS4=[['R1','G0/0'],['R1','G0/1'],['R2','G0/0'],['R2','G0/1']];
+function vlsmPlan(base,hosts){
+  const lans=LANS4.map(([rt,ifc],i)=>{const H=hosts[i],h=hostBits(H);return {type:'lan',i,rt,ifc,sw:`S${i+1}`,pc:`PC${i+1}`,H,h,blk:2**h,p:32-h,mask:maskOf(32-h),desc:`${rt} ${ifc} LAN`};});
+  const wan={type:'wan',rt:'R1',ifc:'S0/0/0',H:2,h:2,blk:4,p:30,mask:maskOf(30),desc:'R1–R2 WAN link'};
+  const links=[...lans.slice().sort((a,b)=>b.H-a.H||a.i-b.i),wan];let at=base;
+  links.forEach((l,r)=>{l.rank=r;l.net=at>>>0;l.first=l.net+1;l.last=l.net+l.blk-2;l.bc=l.net+l.blk-1;at+=l.blk;});
+  const rows=[];
+  ['R1','R2'].forEach(rt=>{lans.filter(l=>l.rt===rt).forEach(l=>rows.push({dev:rt,ifc:l.ifc,role:'rlan',link:l,ip:l.first}));
+    rows.push({dev:rt,ifc:'S0/0/0',role:rt==='R1'?'r1wan':'r2wan',link:wan,ip:rt==='R1'?wan.first:wan.last});});
+  lans.forEach(l=>rows.push({dev:l.sw,ifc:'VLAN 1',role:'sw',link:l,ip:l.first+1,gw:l.first}));
+  lans.forEach(l=>rows.push({dev:l.pc,ifc:'NIC',role:'pc',link:l,ip:l.last,gw:l.first}));
+  return {kind:'vlsm',base,hosts:hosts.slice(),lans,wan,links,rows,need:5,used:at-base,r1:2,r2:2};
+}
+const vlsmFits=hs=>hs.reduce((a,H)=>a+2**hostBits(H),0)+4<=256;
+function vlsmFrom(netRaw,hostsRaw){
+  const b=parseIP(String(netRaw||'').trim().replace(/\/24$/,''));
+  if(b==null||oct(b,3)!==0)return {err:'The network must be a /24 that ends in .0, like 192.168.72.0.'};
+  const a=oct(b,0);if(a===0||a===127||a>=224)return {err:'Use a normal unicast network (first octet 1–223, not 127).'};
+  const hs=(Array.isArray(hostsRaw)?hostsRaw:String(hostsRaw||'').split(/[\s,]+/).filter(Boolean)).map(x=>String(x).trim());
+  if(hs.length!==4||hs.some(x=>!/^\d{1,3}$/.test(x)||Number(x)<2))return {err:'Give each of the four LANs a whole number of hosts, at least 2.'};
+  const H=hs.map(Number);
+  if(!vlsmFits(H)){const need=H.reduce((s,x)=>s+2**hostBits(x),0)+4;return {err:`Those LANs need blocks of ${H.map(x=>2**hostBits(x)).join(' + ')} addresses, plus 4 for the WAN link: ${need}. A /24 only has 256. Use fewer hosts.`};}
+  return {kind:'vlsm',base:ipStr(b),hosts:H};
+}
+function vlsmRandom(){
+  for(;;){const hb=[...Array(4)].map(()=>R(3,7));if(hb.filter(h=>h===7).length>1)continue;
+    const H=hb.map(h=>{const lo=2**(h-1)-1,hi=2**h-2,r=Math.random();return r<.25?hi:r<.45?lo:R(lo,hi);});
+    if(new Set(H).size<4||!vlsmFits(H))continue;
+    const r=Math.random();return {kind:'vlsm',base:r<.6?`192.168.${R(0,255)}.0`:r<.8?`10.${R(0,255)}.${R(0,255)}.0`:`172.${R(16,31)}.${R(0,255)}.0`,hosts:H};}
+}
+const cidr=(n,p)=>`${ipStr(n)}/${p}`;
+function parseCIDR(v){const m=String(v||'').trim().match(/^(\S+?)\s*\/\s*(\d{1,2})$/);if(!m)return null;const ip=parseIP(m[1]),p=Number(m[2]);return ip==null||p>32?null:{ip,p};}
+function genVlsmLab(fixed,part){
+  part=VLSMPARTS[part]?part:'all';const fx=fixed||vlsmRandom();
+  const L=vlsmPlan(parseIP(fx.base),fx.hosts),{base,lans,wan,links,rows}=L,P=a=>ipStr(a).replace(/\d+$/,'');
+  const inc=k=>part==='all'||part===k,fields=[],add=f=>fields.push(f);
+  const sorted=links.slice(0,4);
+  if(inc('size')){
+    add({key:'need',type:'num',label:'How many subnets are needed in the network topology?',where:'Part 1 · Step 1 · Subnets needed',answer:5});
+    lans.forEach(l=>{const w=`Part 1 · Step 2 · ${l.desc} (${l.H} hosts)`;
+      add({key:'vmask',l,type:'ip',pre:'255.255.255.',label:`Which subnet mask will accommodate the ${l.H} host addresses the ${l.desc} needs?`,where:w,answer:l.mask});
+      add({key:'vuse',l,type:'num',label:'How many usable host addresses will this subnet support?',where:w,answer:l.blk-2});});
+    add({key:'wmask',l:wan,type:'ip',pre:'255.255.255.',label:'Which subnet mask will accommodate the connection between R1 and R2?',where:'Part 1 · Step 2 · The R1–R2 link',answer:wan.mask});
+  }
+  if(inc('design')){
+    links.forEach(l=>{const w=`Part 2 · Subnet Table · ${l.rank+1}. ${l.desc}`;
+      add({key:'tnet',l,type:'cidr',pre:P(l.net),label:`${l.desc} (${l.type==='wan'?'2 hosts, the R1–R2 link':l.H+' hosts'}): network address/CIDR`,where:w,answer:{ip:l.net,p:l.p}});
+      add({key:'tfirst',l,type:'ip',pre:P(l.first),label:`${l.desc}: first usable host address`,where:w,answer:l.first});
+      add({key:'tbc',l,type:'ip',pre:P(l.bc),label:`${l.desc}: broadcast address`,where:w,answer:l.bc});});
+    rows.forEach(r=>{const w=`Part 2 · Addressing Table · ${r.dev}${r.role==='sw'||r.role==='pc'?'':' '+r.ifc}`;
+      add({key:'aip',r,type:'ip',pre:P(r.ip),label:`${r.dev} ${r.ifc} IP address`,where:w,answer:r.ip});
+      if(r.dev==='R1'||r.dev==='R2')add({key:'amask',r,type:'ip',pre:'255.255.255.',label:`${r.dev} ${r.ifc} subnet mask`,where:w,answer:r.link.mask});
+      if(r.gw!=null)add({key:'agw',r,type:'ip',pre:P(r.gw),label:`${r.dev} default gateway`,where:w,answer:r.gw});});
+  }
+  // ---------- feedback ----------
+  const linkOf=u=>links.find(l=>u>=l.net&&u<=l.bc)||null;
+  const posName=(u,l)=>u===l.net?'the network address':u===l.bc?'the broadcast address':u===l.first?'the first usable address':u===l.first+1?'the second usable address':u===l.last?'the last usable address':'a host address';
+  const typo=(u,want)=>{const bad=[0,1,2].filter(k=>oct(u,k)!==oct(want,k));if(!bad.length)return null;
+    return `Check for a typo: ${bad.map(k=>`octet ${k+1} should be ${oct(want,k)}, not ${oct(u,k)}`).join(', and ')}. Every address here starts ${M(P(want))}.`;};
+  const RULE={rlan:'Routers take the first usable address on their LANs',r1wan:'R1 takes the first usable address on the WAN link',r2wan:'R2 takes the last usable address on the WAN link (R1 already has the first)',sw:'Switches take the second usable address (the router has the first)',pc:'PCs take the last usable address'};
+  const sizeHow=l=>l.type==='wan'?`A point-to-point link needs 2 addresses. 2 host bits give 2<sup>2</sup> − 2 = 2 usable, so it’s a /30: ${G(ipStr(l.mask))}.`
+    :`The smallest h with 2<sup>h</sup> − 2 ≥ ${l.H} is h = ${G(l.h)} (2<sup>${l.h}</sup> − 2 = ${G(l.blk-2)}). That’s a /${l.p}, mask ${G(ipStr(l.mask))}.`;
+  const maskName=o=>{const p=[0,128,192,224,240,248,252,254,255].indexOf(o);return p>=0?`/${24+p}`:null;};
+  function dMask(f,v){
+    const l=f.l,u=parseIP(v),how=sizeHow(l);if(u===l.mask)return null;
+    if(u==null){if(/^\s*\/\d+\s*$/.test(String(v))||/\/\d+/.test(String(v)))return `Write the mask in dotted decimal, like 255.255.255.224, not as a /prefix. ${how}`;return badEntry(v,'ip')+' '+how;}
+    if(oct(u,0)!==255||oct(u,1)!==255||oct(u,2)!==255)return `Each subnet is carved out of a /24, so the first three octets stay 255. ${how}`;
+    const o=oct(u,3),nm=maskName(o);if(!nm)return `${o} can’t be a mask octet (they’re 128, 192, 224, 240, 248, 252 or 254). ${how}`;
+    const uh=8-[0,128,192,224,240,248,252,254,255].indexOf(o);
+    if(o===l.blk||o===l.blk-2||o===l.H)return `That’s ${o===l.blk?'the block size':'a host count'}, not a mask. The mask octet is 256 − the block size. ${how}`;
+    if(l.type==='wan'){if(uh<2)return `A /31 or /32 leaves no usable host addresses in this course’s rules (2<sup>h</sup> − 2). ${how}`;return `That fits, but it wastes addresses. Point-to-point links use the smallest subnet that holds 2 hosts. ${how}`;}
+    if(uh<l.h&&2**uh>=l.H)return `${nm} gives 2<sup>${uh}</sup> = ${2**uh} addresses, but the network and broadcast take 2, so only ${2**uh-2} hosts fit, fewer than ${l.H}. ${how}`;
+    if(uh<l.h)return `${nm} only holds 2<sup>${uh}</sup> − 2 = ${Math.max(0,2**uh-2)} hosts, fewer than ${l.H}. ${how}`;
+    return `${nm} fits ${l.H} hosts, but it’s bigger than needed. VLSM gives each LAN the <b>smallest</b> subnet that fits, so no addresses are wasted. ${how}`;
+  }
+  function dNum(f,v){
+    const u=toNum(v);if(u===f.answer)return null;if(u==null)return 'Type a whole number.';
+    if(f.key==='need'){const how=`Each of the 4 LANs is one subnet, and the R1–R2 link is one more: 4 + 1 = ${G(5)}.`;
+      if(u===4)return `You counted the LANs, but the serial link between R1 and R2 needs its own subnet too. ${how}`;
+      if(u===6)return `The R1–R2 link is a single subnet, even though it has two ends. ${how}`;
+      return `Count networks, not devices. ${how}`;}
+    const l=f.l,how=`${l.h} host bits: 2<sup>${l.h}</sup> − 2 = ${G(l.blk-2)} usable addresses.`;
+    if(u===l.blk)return `2<sup>${l.h}</sup> = ${l.blk} counts every address, but the network and broadcast addresses can’t go to hosts: subtract 2. ${how}`;
+    if(u===l.H)return `${l.H} is what the LAN needs. The question asks what the subnet supports, which is usually a bit more. ${how}`;
+    return how;
+  }
+  function dCidr(f,v){
+    const l=f.l,c=parseCIDR(v),want=`${G(cidr(l.net,l.p))}`;if(c&&c.ip===l.net&&c.p===l.p)return null;
+    const prev=links[l.rank-1];
+    const how=l.rank===0?`The biggest LAN goes first, at the start of the /24: ${want}.`
+      :`It starts right after ${prev.desc} ends: ${ipStr(prev.bc)} + 1 = ${want} (the /${l.p} comes from its mask${l.type==='wan'?', /30 for the link':''}).`;
+    if(!c){const ip=parseIP(v);if(ip!=null)return `Add the prefix length after a slash, like ${M(ipStr(ip)+'/'+l.p)}. ${how}`;return `Write it as an address, a slash and the prefix length, like ${M('192.168.1.0/26')}. ${how}`;}
+    const ty=typo(c.ip,l.net);if(ty)return ty;
+    if(c.ip===l.net)return `The address is right. The prefix should match this subnet’s mask, ${ipStr(l.mask)} = /${l.p}. ${how}`;
+    const other=links.find(x=>x.net===c.ip&&x!==l);
+    if(l.rank>0&&c.ip===sorted[0].net)return `That’s where the first subnet starts. VLSM lays the subnets out one after another, biggest first. ${how}`;
+    if(other)return `That’s ${other.desc}’s network. The subnets go biggest first: ${links.map(x=>x.desc.replace(' LAN','')).join(', ')}. ${how}`;
+    if(prev&&c.ip===prev.bc)return `That’s ${prev.desc}’s broadcast address. Add 1. ${how}`;
+    if(prev&&c.ip===prev.net+l.blk)return `Each subnet starts where the previous one ends, so add the <b>previous</b> subnet’s block size (${prev.blk}), not this one’s. ${how}`;
+    return how;
+  }
+  function dIP(f,v){
+    if(f.key==='vmask'||f.key==='wmask')return dMask(f,v);
+    const u=parseIP(v);if(u===f.answer)return null;
+    if(f.key==='amask'){const l=f.r.link,how=`${f.r.dev} ${f.r.ifc} is on the ${l.desc}, a /${l.p}: ${G(ipStr(l.mask))}.`;
+      if(u==null)return badEntry(v,'ip')+' '+how;const o=links.find(x=>x.mask===u);
+      if(o)return `${ipStr(u)} is the ${o.desc}’s mask. With VLSM each interface uses the mask of its own subnet. ${how}`;return how;}
+    if(u==null)return badEntry(v,'ip');
+    {const ty=typo(u,f.answer);if(ty)return ty;}
+    const k=linkOf(u);
+    switch(f.key){
+      case 'tfirst':return `First usable = network address + 1 = ${G(ipStr(f.answer))}.${u===f.l.net?' The network address itself can’t go to a host.':''}`;
+      case 'tbc':{const how=`Broadcast = network + this subnet’s block size (${f.l.blk}) − 1 = ${G(ipStr(f.answer))}.`;
+        if(u===f.l.bc+1)return `That’s where the next subnet starts. ${how}`;
+        if(k&&k!==f.l)return `That’s inside the ${k.desc}. ${how}`;return how;}
+      case 'aip':{const r=f.r,l=r.link,rule=`${RULE[r.role]}: ${G(ipStr(f.answer))}.`;
+        if(k!==l)return `${ipStr(u)} is ${k?`in the ${k.desc}`:'outside every subnet'}, but ${r.dev}${r.role==='pc'||r.role==='sw'?'':' '+r.ifc} is on the ${l.desc} (${cidr(l.net,l.p)}). ${rule}`;
+        if(r.role==='r2wan'&&u===l.first)return `R1 already has the first usable address on this link, so they’d clash. ${rule}`;
+        if(u===l.net||u===l.bc)return `That’s ${posName(u,l)}, which no device can use. ${rule}`;
+        return `That’s ${posName(u,l)} of the ${l.desc}. ${rule}`;}
+      case 'agw':{const r=f.r,l=r.link,how=`The default gateway is the router’s interface on the same LAN, ${l.rt} ${l.ifc}: ${G(ipStr(f.answer))}.`;
+        if(u===r.ip)return `A device can’t be its own gateway. ${how}`;
+        if(r.role==='pc'&&u===l.first+1)return `That’s the switch. A switch only connects the LAN; the gateway is the router. ${how}`;
+        if(k!==l)return `The gateway has to be on ${r.dev}’s own subnet. ${how}`;return how;}
+    }
+    return null;
+  }
+  const diag=x=>fields.map((f,i)=>{const v=x[i];if(f.type==='num')return dNum(f,v);if(f.type==='cidr')return dCidr(f,v);return dIP(f,v);});
+  // ---------- hints ----------
+  const walk=()=>{const st=[];
+    fields.forEach((f,i)=>{const fin=o=>st.push(Object.assign({f:i,tip:''},o));
+      switch(f.key){
+        case 'need':st.push({q:'Count the LANs: each router port that leads to a switch and PC is one LAN. LANs = ?',tip:''});
+          fin({q:'Every LAN needs a subnet, and so does the serial link between R1 and R2. Subnets needed = ?'});break;
+        case 'vmask':st.push({q:`Find the smallest h (host bits) where 2<sup>h</sup> − 2 ≥ ${f.l.H}. Try 2<sup>${f.l.h-1}</sup> − 2 = ${2**(f.l.h-1)-2}: is that enough?`,tip:'2<sup>h</sup> − 2: 6, 14, 30, 62, 126.'});
+          fin({q:`h = ${f.l.h}, so the prefix is 32 − ${f.l.h} = /${f.l.p}. Write the mask: the last octet is 256 − 2<sup>${f.l.h}</sup>.`,tip:'Mask ladder: /25 = 128, /26 = 192, /27 = 224, /28 = 240, /29 = 248, /30 = 252.'});break;
+        case 'vuse':fin({q:`Usable hosts = 2<sup>${f.l.h}</sup> − 2 (no network or broadcast).`});break;
+        case 'wmask':fin({q:'The R1–R2 link only needs 2 addresses, one per router. Which prefix gives exactly 2 usable?',tip:'2 host bits: 2<sup>2</sup> − 2 = 2, so /30.'});break;
+        case 'tnet':if(f.l.rank===0)st.push({q:`Order the subnets biggest first: ${links.map(x=>`${x.desc} (${x.type==='wan'?2:x.H})`).join(', ')}.`,tip:''});
+          fin({q:f.l.rank===0?`The biggest LAN starts at the beginning of the /24. Write it with its prefix, /${f.l.p}.`:`Start right after the ${links[f.l.rank-1].desc}: its broadcast + 1. Add this subnet’s prefix, /${f.l.p}.`});break;
+        case 'tfirst':fin({q:'First usable = network address + 1.'});break;
+        case 'tbc':fin({q:`Broadcast = network + the block size (2<sup>${f.l.h}</sup> = ${f.l.blk}) − 1.`});break;
+        case 'aip':{const r=f.r,l=r.link;st.push({q:`${r.dev}${r.role==='pc'||r.role==='sw'?'':' '+r.ifc} is on the ${l.desc}. Find it in your subnet table: ${cidr(l.net,l.p)}.`,tip:''});
+          fin({q:`${RULE[r.role]}. The ${l.desc} runs from ${ipStr(l.net)} to ${ipStr(l.bc)}. Write the address.`});break;}
+        case 'amask':fin({q:`Each interface takes its own subnet’s mask. The ${f.r.link.desc} is a /${f.r.link.p}.`});break;
+        case 'agw':fin({q:`A device’s default gateway is the router interface on its LAN: ${f.r.link.rt} ${f.r.link.ifc}. Write that interface’s address.`,tip:'Routers don’t get a default gateway in the table (N/A).'});break;
+      }});
+    return st;};
+  // ---------- worked answers, tables, printout ----------
+  const sizeTable=`<table class="sol chartsol"><tr><th>Subnet</th><th>Hosts needed</th><th>Host bits</th><th>Mask</th><th>Usable</th></tr>${[...lans,wan].map(l=>`<tr><td>${l.desc}</td><td>${l.type==='wan'?2:l.H}</td><td>${l.h}</td><td class="mono">${ipStr(l.mask)} (/${l.p})</td><td>${l.blk-2}</td></tr>`).join('')}</table>`;
+  const subTable=`<table class="sol chartsol"><tr><th>Subnet</th><th>Hosts</th><th>Network/CIDR</th><th>First usable</th><th>Broadcast</th></tr>${links.map(l=>`<tr><td>${l.desc}</td><td>${l.type==='wan'?2:l.H}</td><td class="mono">${cidr(l.net,l.p)}</td><td class="mono">${ipStr(l.first)}</td><td class="mono">${ipStr(l.bc)}</td></tr>`).join('')}</table>`;
+  const addrTable=rs=>`<table class="sol chartsol"><tr><th>Device</th><th>Interface</th><th>IP address</th><th>Subnet mask</th><th>Default gateway</th></tr>${rs.map(r=>`<tr><td>${r.dev}</td><td>${r.ifc}</td><td class="mono">${ipStr(r.ip)}</td><td class="mono">${ipStr(r.link.mask)}</td><td class="mono">${r.gw!=null?ipStr(r.gw):'N/A'}</td></tr>`).join('')}</table>`;
+  const explain=[
+    inc('size')?`<p><b>Part 1.</b> 4 LANs + the R1–R2 link = <b>5</b> subnets. Each one gets the smallest block that fits its hosts (2<sup>h</sup> − 2 ≥ hosts), and the link gets a /30.</p>${sizeTable}`:'',
+    inc('design')?`<p><b>Part 2.</b> Biggest first, each subnet starting right after the last one’s broadcast. Routers take the first usable address on each LAN, R1 the first and R2 the last on the link, switches the second usable, and PCs the last usable. Each interface uses its own subnet’s mask.</p>${subTable}${addrTable(rows)}`:''].join('');
+  const req=`<ul class="lab-req">${lans.map(l=>`<li>The <b>${l.desc}</b> will require <b>${l.H}</b> host IP addresses</li>`).join('')}</ul>`;
+  const scen=`Design a VLSM addressing scheme for <b class="big">${ipStr(base)}/24</b>. ${req}`;
+  const given=part==='design'?`<details class="fs-ref" open><summary>Part 1, done for you</summary><div class="tablewrap">${sizeTable}</div></details>`:'';
+  // the tables beside the questions, filling in as they're answered
+  function sheet(ctx){
+    const {end,cur,miss,justDone,ipCell}=ctx,cls=j=>`${miss[j]?' miss':''}${j===justDone?' pop':''}`,done=j=>j<end;
+    const val=j=>{const g=fields[j];return g.type==='ip'?ipCell(g.answer):g.type==='cidr'?`${ipCell(g.answer.ip)}<span class="dim">/${g.answer.p}</span>`:String(g.answer);};
+    const cell=j=>j==null?'':done(j)?`<span class="fs-cv${cls(j)}">${val(j)}</span>`:j===cur?'<span class="fs-cur">?</span>':'';
+    const find=(key,pred)=>{const j=fields.findIndex(g=>g.key===key&&pred(g));return j<0?null:j;};
+    const key=(fields[cur<0?fields.length-1:cur]||{}).key,out=[];
+    if(inc('size')&&['need','vmask','vuse','wmask'].includes(key)){
+      const nj=find('need',()=>true);
+      out.push(`<div class="fs-sec">Part 1 · Sizing</div>${nj!=null&&done(nj)?`<div class="fs-row"><span>Subnets needed</span><b class="mono">5</b></div>`:''}<div class="tablewrap"><table class="fs-chart"><tr><th>Subnet</th><th>Hosts</th><th>Mask</th><th>Usable</th></tr>${[...lans,wan].map(l=>`<tr><td class="fs-rl">${l.desc.replace(' LAN','')}</td><td>${l.type==='wan'?2:l.H}</td><td>${cell(find(l.type==='wan'?'wmask':'vmask',g=>g.l===l))}</td><td>${l.type==='wan'?(done(find('wmask',()=>true)??1e9)?'<span class="fs-cv">2</span>':''):cell(find('vuse',g=>g.l===l))}</td></tr>`).join('')}</table></div>`);
+    } else {
+      if(part==='design')out.push(given);
+      const shown=links.filter(l=>{const j=find('tnet',g=>g.l===l);return j!=null&&j<=Math.max(end-1,cur);});
+      if(shown.length)out.push(`<div class="fs-sec">Subnet Table</div><div class="tablewrap"><table class="fs-chart"><tr><th>Subnet</th><th>Network/CIDR</th><th>First usable</th><th>Broadcast</th></tr>${shown.map(l=>`<tr><td class="fs-rl">${l.desc.replace(' LAN','')}</td><td>${cell(find('tnet',g=>g.l===l))}</td><td>${cell(find('tfirst',g=>g.l===l))}</td><td>${cell(find('tbc',g=>g.l===l))}</td></tr>`).join('')}</table></div>`);
+      const rs=rows.filter(r=>{const j=find('aip',g=>g.r===r);return j!=null&&j<=Math.max(end-1,cur);});
+      if(rs.length)out.push(`<div class="fs-sec">Addressing Table</div><div class="tablewrap"><table class="fs-chart"><tr><th>Device</th><th>Interface</th><th>IP</th><th>Mask</th><th>Gateway</th></tr>${rs.map(r=>{const mj=find('amask',g=>g.r===r),gj=find('agw',g=>g.r===r),aj=find('aip',g=>g.r===r);
+        const m=mj!=null?cell(mj):done(aj)?`<span class="fs-cv">${ipCell(r.link.mask)}</span>`:'';
+        return `<tr><td class="fs-rl">${r.dev}</td><td>${r.ifc}</td><td>${cell(aj)}</td><td>${m}</td><td>${gj!=null?cell(gj):'<span class="dim">N/A</span>'}</td></tr>`;}).join('')}</table></div>`);
+    }
+    return out.length?`<div class="fsheet">${out.join('')}</div>`:'';
+  }
+  return {kind:'vlsm',part,L,fields,title:`11.9.3 VLSM Design${part!=='all'?` · ${VLSMPARTS[part]}`:''}`,prompt:`${scen}${topoSVG(L)}`,
+    mini:`${ipStr(base)}/24 · LANs of ${lans.map(l=>l.H).join(', ')}`,diag,walk,explain,sheet,subTable,addrTable,sizeTable,
+    params:{vlsm:ipStr(base),hosts:lans.map(l=>l.H).join(',')}};
+}
+function printVlsmHTML(q,num,key){
+  const L=q.L,v=x=>key?ipStr(x):'',blank=x=>key?`<b>${x}</b>`:'<span class="pp-line"></span>';
+  return `<section class="pp pp-lab"><div class="pp-head"><b>Lab ${num}</b><span class="pp-given">${ipStr(L.base)}/24</span></div>
+    <p class="pp-intro">Design a VLSM addressing scheme for ${ipStr(L.base)}/24. ${L.lans.map(l=>`The ${l.desc} will require ${l.H} host IP addresses.`).join(' ')}</p>
+    ${topoSVG(L)}
+    <h4>Part 1 · Step 1: Determine the number of subnets</h4><ol class="pp-qs" type="a"><li>How many subnets are needed? ${blank(5)}</li></ol>
+    <h4>Step 2: Determine the subnet mask for each subnet</h4><ol class="pp-qs" type="a">${L.lans.map(l=>`<li>${l.desc} (${l.H} hosts): mask ${blank(ipStr(l.mask))} &nbsp; usable hosts ${blank(l.blk-2)}</li>`).join('')}<li>R1–R2 link: mask ${blank(ipStr(L.wan.mask))}</li></ol>
+    <h4>Part 2 · Subnet Table (biggest first)</h4><table class="pp-chart pp-addr"><tr><th>Subnet description</th><th>Hosts needed</th><th>Network address/CIDR</th><th>First usable host</th><th>Broadcast address</th></tr>${L.links.map(l=>`<tr><td>${key?l.desc:''}</td><td>${key?(l.type==='wan'?2:l.H):''}</td><td>${key?cidr(l.net,l.p):''}</td><td>${v(l.first)}</td><td>${v(l.bc)}</td></tr>`).join('')}</table>
+    <h4>Addressing Table</h4><table class="pp-chart pp-addr"><tr><th>Device</th><th>Interface</th><th>IP address</th><th>Subnet mask</th><th>Default gateway</th></tr>${L.rows.map(r=>`<tr><td>${r.dev}</td><td>${r.ifc}</td><td>${v(r.ip)}</td><td>${v(r.link.mask)}</td><td>${key?(r.gw!=null?ipStr(r.gw):'N/A'):''}</td></tr>`).join('')}</table>
+    <p class="pp-note">Rules: R1 takes the first usable address on its LANs and the WAN link; R2 the first on its LANs and the last on the WAN link; switches the second usable; PCs the last usable.</p>
+    <p class="pp-note">Part 3: configure R1’s LAN interfaces, S3’s VLAN 1 and default gateway, and PC4’s IP settings, then verify with ping.</p></section>`;
+}
+
 // typed answers: an IP field shows its first three octets, so a bare last octet (".33" or "33") is enough
-function expand(f,raw){if(!f||!f.pre||raw==null)return raw;const m=String(raw).trim().match(/^\.?(\d{1,3})$/);return m?f.pre+m[1]:raw;}
+function expand(f,raw){if(!f||!f.pre||raw==null)return raw;
+  if(f.type==='cidr'){const m=String(raw).trim().match(/^\.?(\d{1,3})(\s*\/\s*\d{1,2})?$/);return m?f.pre+m[1]+(m[2]||''):raw;}
+  const m=String(raw).trim().match(/^\.?(\d{1,3})$/);return m?f.pre+m[1]:raw;}
 function isRight(f,v){
   if(f.type==='bits')return String(v).replace(/[\s.]/g,'')===f.answer;
   if(f.type==='ip')return parseIP(v)===f.answer;
+  if(f.type==='cidr'){const c=parseCIDR(v);return !!c&&c.ip===f.answer.ip&&c.p===f.answer.p;}
   const s=String(v).replace(/[,\s]/g,'');return /^\d+$/.test(s)&&Number(s)===f.answer;
 }
-const show=f=>f.type==='ip'?ipStr(f.answer):String(f.answer);
+const show=f=>f.type==='ip'?ipStr(f.answer):f.type==='cidr'?cidr(f.answer.ip,f.answer.p):String(f.answer);
 // the hint steps for each question: walk() lists steps in order, and a step with f closes question f
 function hintsFor(q){const out=q.fields.map(()=>[]);let buf=[];q.walk().forEach(s=>{buf.push(s);if(s.f!=null){out[s.f]=buf;buf=[];}});return out;}
-const api={LABPARTS,labFrom,genLab,printLabHTML,topoSVG,expand,isRight,show,hintsFor,ipStr,oct,parseIP,bin8,esc,isBlank};
+const api={LABPARTS,VLSMPARTS,labFrom,vlsmFrom,genLab,genVlsmLab,printLabHTML,printVlsmHTML,vlsmPlan,hostBits,topoSVG,expand,isRight,show,hintsFor,ipStr,oct,parseIP,bin8,esc,isBlank};
 if(typeof module!=='undefined')module.exports=api;else window.LAB=api;
 })();
