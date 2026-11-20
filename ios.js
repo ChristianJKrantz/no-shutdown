@@ -76,14 +76,16 @@ const HELP={enable:'Turn on privileged commands',disable:'Turn off privileged co
   'general-keys':'Generate a general purpose RSA key pair',modulus:'Provide number of modulus bits on the command line',startup:'',running:''};
 const G={
   user:[
-    [['enable'],'enable'],[['exit'],'exit'],[['logout'],'exit'],[['ping',P.ip],'ping'],[['show','version'],'show version'],[['show','ip','interface','brief'],'show ip int brief'],
+    [['enable'],'enable'],[['exit'],'exit'],[['logout'],'exit'],[['ping',P.ip],'ping'],[['ping',P.ipv6a],'ping6'],[['show','version'],'show version'],[['show','ip','interface','brief'],'show ip int brief'],
+    [['show','interfaces'],'show interfaces'],[['show','interfaces',P.iface],'show interfaces'],[['show','ip','route'],'show ip route'],[['show','ipv6','interface','brief'],'show ipv6 int brief'],[['show','ipv6','neighbors'],'show ipv6 neighbors'],
   ],
   priv:[
     [['configure','terminal'],'conf t'],[['disable'],'disable'],[['exit'],'exit'],[['logout'],'exit'],
     [['show','running-config'],'show run'],[['show','startup-config'],'show start'],[['show','version'],'show version'],[['show','ip','interface','brief'],'show ip int brief'],[['show','flash'],'show flash'],
     [['copy','running-config','startup-config'],'copy run start'],[['copy','running-config',P.file],'copy run flash'],[['copy','startup-config','running-config'],'copy start run'],[['copy',P.file,'running-config'],'copy flash run'],
     [['write','memory'],'copy run start'],[['write'],'copy run start'],
-    [['erase','startup-config'],'erase start'],[['delete',P.file],'delete'],[['reload'],'reload'],[['ping',P.ip],'ping'],
+    [['erase','startup-config'],'erase start'],[['delete',P.file],'delete'],[['reload'],'reload'],[['ping',P.ip],'ping'],[['ping',P.ipv6a],'ping6'],
+    [['show','interfaces'],'show interfaces'],[['show','interfaces',P.iface],'show interfaces'],[['show','ip','route'],'show ip route'],[['show','ipv6','interface','brief'],'show ipv6 int brief'],[['show','ipv6','neighbors'],'show ipv6 neighbors'],[['clear','ipv6','neighbors'],'clear ipv6 neighbors'],
   ],
   config:[
     [['hostname',P.word],'hostname'],[['no','hostname'],'no hostname'],
@@ -92,7 +94,7 @@ const G={
     [['enable','secret',P.line],'enable secret'],[['enable','password',P.line],'enable password'],[['no','enable','secret'],'no enable secret'],[['no','enable','password'],'no enable password'],
     [['service','password-encryption'],'service password-encryption'],[['no','service','password-encryption'],'no service password-encryption'],
     [['banner','motd',P.line],'banner motd'],[['no','banner','motd'],'no banner motd'],
-    [['ip','default-gateway',P.ip],'ip default-gateway'],[['no','ip','default-gateway'],'no ip default-gateway'],[['ipv6','default-gateway',P.ipv6a],'ipv6 default-gateway'],
+    [['ip','default-gateway',P.ip],'ip default-gateway'],[['no','ip','default-gateway'],'no ip default-gateway'],[['ipv6','default-gateway',P.ipv6a],'ipv6 default-gateway'],[['ipv6','unicast-routing'],'ipv6 unicast-routing'],[['no','ipv6','unicast-routing'],'no ipv6 unicast-routing'],
     [['line','console',P.num(0,0,'First line number')],'line con'],[['line','vty',P.num(0,15,'First line number'),P.num(0,15,'Last line number')],'line vty'],
     [['interface',P.iface],'interface'],
     [['crypto','key','generate','rsa'],'crypto key'],[['crypto','key','generate','rsa','general-keys','modulus',P.num(360,4096,'size of the key modulus')],'crypto key mod'],
@@ -118,7 +120,7 @@ const G={
     [['end'],'end'],[['exit'],'exit'],[['do',P.line],'do'],
   ],
   pc:[
-    [['ipconfig'],'ipconfig'],[['ping',P.ip],'ping'],[['ssh','-l',P.word,P.ip],'ssh'],
+    [['ipconfig'],'ipconfig'],[['ping',P.ip],'ping'],[['ping','-n',P.num(1,1000,'Number of echo requests'),P.ip],'ping'],[['ping',P.ipv6a],'ping6'],[['ping','-n',P.num(1,1000,'Number of echo requests'),P.ipv6a],'ping6'],[['ssh','-l',P.word,P.ip],'ssh'],
   ],
 };
 const PCHELP={ipconfig:'Show this PC\'s IP settings',ping:'Send echo requests',ssh:'Secure shell to a device','-l':'Log in as this user'};
@@ -207,7 +209,7 @@ function complete(mode,input,dev){
 /* ---------------- running a command ---------------- */
 const out=(d,t,c)=>{(d.out=d.out||[]).push({t,c:c||'out'});};
 function caret(d,input,at){out(d,' '.repeat(prompt(d).length+at)+'^','err');out(d,"% Invalid input detected at '^' marker.",'err');}
-const EXECNAMES=new Set(['show run','show start','show version','show ip int brief','show flash','copy run start','copy run flash','copy start run','copy flash run','erase start','delete','reload','ping','conf t']);
+const EXECNAMES=new Set(['show run','show start','show version','show ip int brief','show flash','show interfaces','show ip route','show ipv6 int brief','show ipv6 neighbors','clear ipv6 neighbors','ping6','copy run start','copy run flash','copy start run','copy flash run','erase start','delete','reload','ping','conf t']);
 /* teaching notes for common mistakes (shown after the IOS error) */
 function coach(d,input,mode){
   const s=input.trim().toLowerCase().replace(/\s+/g,' ');
@@ -307,6 +309,17 @@ function doCmd(d,r,net,raw){
       if(d.dirty){d.pending={prompt:'System configuration has been modified. Save? [yes/no]:',fn:v=>{const t=v.trim().toLowerCase();if(t.startsWith('y')){d.startup=clone(c);d.dirty=false;out(d,'Building configuration...\n[OK]');}else if(!t.startsWith('n')){out(d,'% Please answer \'yes\' or \'no\'.','err');return;}go();}};}else go();
       return;}
     case 'ping':out(d,pingText(d,a[0],net,'ios'));return;
+    case 'ping6':{const ok=net&&net.ping6?net.ping6(d,a[0]):false;d.pings=d.pings||[];d.pings.push({ip:a[0].toLowerCase(),ok});
+      out(d,`Type escape sequence to abort.\nSending 5, 100-byte ICMP Echos to ${a[0]}, timeout is 2 seconds:\n${ok?'!!!!!':'.....'}\nSuccess rate is ${ok?'100 percent (5/5), round-trip min/avg/max = 0/0/1 ms':'0 percent (0/5)'}`);return;}
+    case 'show interfaces':{const want=a[0]?ifaceName(a[0],d):null;if(a[0]&&!want){caret(d,raw,raw.length-a[0].length);return;}
+      out(d,Object.entries(c.ifaces).filter(([n])=>!want||n===want).map(([n,x])=>showIface(d,n,x,net)).join('\n'));return;}
+    case 'show ip route':out(d,showRoute(d,net));return;
+    case 'show ipv6 int brief':out(d,Object.entries(c.ifaces).map(([n,x])=>{const[st,pr]=ifStatus(d,n,x,net);const v6=(x.ipv6||[]);
+      const ll=x.ll||(v6.length?eui64ll(macOf(d,n)):null);return `${n.padEnd(27)}[${st==='administratively down'?'administratively down':st}/${pr}]\n${ll?'    '+ll.toUpperCase()+'\n':''}${v6.map(v=>'    '+v.split('/')[0].toUpperCase()).join('\n')||'    unassigned'}`;}).join('\n'));return;
+    case 'show ipv6 neighbors':{const t=d.nd6||[];out(d,'IPv6 Address                              Age Link-layer Addr State Interface'+(t.length?'\n'+t.map(e=>`${e.ip.toUpperCase().padEnd(42)}${'0'.padStart(3)} ${e.mac.padEnd(15)} REACH ${e.iface}`).join('\n'):''));return;}
+    case 'clear ipv6 neighbors':d.nd6=[];d.cleared6=(d.cleared6||0)+1;return;
+    case 'ipv6 unicast-routing':c.v6route=true;return;
+    case 'no ipv6 unicast-routing':c.v6route=false;return;
     case 'hostname':c.hostname=a[0];return;
     case 'no hostname':c.hostname=d.type==='router'?'Router':'Switch';return;
     case 'no ip domain-lookup':c.domainLookup=false;return;
@@ -379,7 +392,7 @@ function reload(d){
 function sessionStart(d,fromExit){
   if(d.cfg.banner!=null)out(d,d.cfg.banner);
   const L=d.cfg.lines.con;
-  if(L.login==='line'&&L.password){out(d,'\nUser Access Verification\n');const ask=()=>{d.pending={prompt:'Password:',mask:true,fn:v=>{if(v!==L.password){out(d,'% Login invalid','err');ask();}}};};ask();}
+  if(L.login==='line'&&L.password){out(d,'\nUser Access Verification\n');const ask=()=>{d.pending={prompt:'Password:',mask:true,fn:v=>{if(v==='')return ask();if(v!==L.password){out(d,'% Login invalid','err');ask();}}};};ask();}
   else if(L.login==='local'&&Object.keys(d.cfg.users).length){out(d,'\nUser Access Verification\n');const ask=()=>{d.pending={prompt:'Username:',fn:u=>{d.pending={prompt:'Password:',mask:true,fn:p=>{const x=d.cfg.users[u.trim()];if(!x||x.pw!==p){out(d,'% Login invalid\n','err');ask();}}};}};};ask();}
   void fromExit;
 }
@@ -397,6 +410,7 @@ function configText(d,c){
   if(!c.domainLookup)L.push('no ip domain-lookup');
   if(c.domain)L.push(`ip domain-name ${c.domain}`);
   if(c.sshVer)L.push(`ip ssh version ${c.sshVer}`);
+  if(c.v6route)L.push('ipv6 unicast-routing');
   if(c.blockFor)L.push(`login block-for ${c.blockFor.time} attempts ${c.blockFor.attempts} within ${c.blockFor.within}`);
   L.push('!');
   Object.entries(c.ifaces).forEach(([n,x])=>{L.push(`interface ${n}`);if(x.desc)L.push(` description ${x.desc}`);
@@ -413,6 +427,62 @@ function configText(d,c){
   L.push('end');return L.join('\n');
 }
 const runningConfig=d=>configText(d,d.cfg);
+// a fixed, made-up MAC per interface (or one the task sets in d.macs), in Cisco's dotted form
+function macOf(d,n){if(d.macs&&d.macs[n])return d.macs[n];const h=hash((d.name||'')+'/'+n),g=hash(n+'#'+(d.name||''));
+  return `00${(h&0xff).toString(16).padStart(2,'0')}.${((h>>>8)&0xffff).toString(16).padStart(4,'0')}.${(g&0xffff).toString(16).padStart(4,'0')}`;}
+function eui64ll(mac){const h=mac.replace(/\./g,'').toLowerCase();const b=parseInt(h.slice(0,2),16)^2;
+  const x=[b.toString(16).padStart(2,'0')+h.slice(2,4),h.slice(4,6)+'ff','fe'+h.slice(6,8),h.slice(8,12)].map(g=>g.replace(/^0+(?=.)/,''));return 'fe80::'+x.join(':');}
+const BW=n=>n.startsWith('Serial')?1544:n.startsWith('Gigabit')?1000000:n.startsWith('Fast')?100000:n.startsWith('Vlan')?100000:8000000;
+function showIface(d,n,x,net){
+  const [st,pr]=ifStatus(d,n,x,net),ser=n.startsWith('Serial'),mac=macOf(d,n),L=[`${n} is ${st}, line protocol is ${pr}${ser||st!=='up'?'':' (connected)'}`];
+  L.push(ser?'  Hardware is HD64570':`  Hardware is ${n.startsWith('Gigabit')?'CN Gigabit Ethernet':n.startsWith('Vlan')?'CPU Interface':'Lance'}, address is ${mac} (bia ${mac})`);
+  if(x.desc)L.push(`  Description: ${x.desc}`);
+  if(x.ip)L.push(`  Internet address is ${x.ip}/${prefixOf(ip2n(x.mask))}`);
+  L.push(`  MTU 1500 bytes, BW ${BW(n)} Kbit/sec, DLY ${ser?20000:n.startsWith('Gigabit')?10:100} usec,`,'     reliability 255/255, txload 1/255, rxload 1/255',
+    `  Encapsulation ${ser?'HDLC':'ARPA'}, loopback not set${ser?'':''}`,ser?'  Keepalive set (10 sec)':'  Keepalive set (10 sec)',
+    ser?'':`  ${n.startsWith('Gigabit')?'Full-duplex, 1000Mb/s':'Full-duplex, 100Mb/s'}, media type is RJ45`,
+    '  Last input 00:00:08, output 00:00:05, output hang never','  Last clearing of "show interface" counters never',
+    '  Input queue: 0/75/0 (size/max/drops); Total output drops: 0','  5 minute input rate 0 bits/sec, 0 packets/sec','  5 minute output rate 0 bits/sec, 0 packets/sec');
+  return L.filter(Boolean).join('\n');
+}
+// the routing table: connected (C) and local (L) routes, plus OSPF (O) routes when the network runs dynamic routing
+function routesOf(d,net){
+  const R=[],up=ifacesUp(d,net),short=n=>n;
+  up.forEach(f=>{R.push({c:'C',net:netOf(f.ip,f.mask),p:prefixOf(f.mask),ifc:short(f.name)});R.push({c:'L',net:f.ip,p:32,ifc:short(f.name)});});
+  if(net&&net.routing){
+    const routers=Object.values(net.devices).filter(x=>x.type==='router'),have=new Set(R.filter(r=>r.c==='C').map(r=>r.net+'/'+r.p));
+    // breadth-first over router-to-router links: the first hop toward each router, and the cost to reach it
+    const seen=new Map([[d,{hop:null,ifc:null,cost:0}]]),q=[d];
+    while(q.length){const a=q.shift(),A=seen.get(a);
+      routers.forEach(b=>{if(seen.has(b))return;const ai=ifacesUp(a,net).find(x=>ifacesUp(b,net).some(y=>sameNet(x.ip,y.ip,x.mask)));if(!ai)return;
+        const bi=ifacesUp(b,net).find(y=>sameNet(ai.ip,y.ip,ai.mask)),cost=A.cost+(ai.name.startsWith('Serial')?64:1);
+        seen.set(b,a===d?{hop:bi.ip,ifc:ai.name,cost}:{hop:A.hop,ifc:A.ifc,cost});q.push(b);});}
+    seen.forEach((v,b)=>{if(b===d)return;ifacesUp(b,net).forEach(f=>{const k=netOf(f.ip,f.mask)+'/'+prefixOf(f.mask);if(have.has(k))return;have.add(k);
+      R.push({c:'O',net:netOf(f.ip,f.mask),p:prefixOf(f.mask),hop:v.hop,ifc:v.ifc,cost:v.cost+(f.name.startsWith('Serial')?64:1)});});});
+  }
+  return R;
+}
+function showRoute(d,net){
+  const R=routesOf(d,net);d.routeViews=(d.routeViews||0)+1;
+  const head=`Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, E - EGP
+       i - IS-IS, L1 - IS-IS level-1, L2 - IS-IS level-2, ia - IS-IS inter area
+       * - candidate default, U - per-user static route, o - ODR
+       P - periodic downloaded static route
+
+Gateway of last resort is not set
+`;
+  const cls=n=>{const a=n>>>24;return a<128?8:a<192?16:24;},groups=new Map();
+  R.forEach(r=>{const l=cls(r.net),k=n2ip(netOf(r.net,(0xFFFFFFFF<<(32-l))>>>0))+'/'+l;if(!groups.has(k))groups.set(k,[]);groups.get(k).push(r);});
+  const body=[...groups].sort((x,y)=>ip2n(x[0].split('/')[0])-ip2n(y[0].split('/')[0])).map(([k,rs])=>{
+    rs.sort((x,y)=>x.net-y.net||x.p-y.p);const masks=new Set(rs.map(r=>r.p)).size;
+    const h=`     ${k} is ${masks>1?'variably subnetted':'subnetted'}, ${rs.length} subnet${rs.length>1?'s':''}${masks>1?`, ${masks} masks`:''}`;
+    return [h,...rs.map(r=>r.c==='O'?`O       ${n2ip(r.net)}/${r.p} [110/${r.cost}] via ${n2ip(r.hop)}, 00:0${(r.cost%5)+1}:${String(10+r.cost%40).padStart(2,'0')}, ${r.ifc}`
+      :`${r.c}       ${n2ip(r.net)}/${r.p} is directly connected, ${r.ifc}`)].join('\n');}).join('\n');
+  return head+(body?'\n'+body:'');
+}
 function showVersion(d){
   const r=d.cfg.configReg,b=d.bootReg;
   return `Cisco IOS Software, ${d.type==='router'?'C1900 Software (C1900-UNIVERSALK9-M)':'C2960 Software (C2960-LANBASEK9-M)'}, Version 15.1(4)M4, RELEASE SOFTWARE (fc2)\n\n${d.cfg.hostname} uptime is 12 minutes\nSystem image file is "flash:${d.type==='router'?'c1900-universalk9-mz.SPA.151-4.M4.bin':'c2960-lanbasek9-mz.150-2.SE4.bin'}"\n\n${d.type==='router'?'Cisco CISCO1941/K9 (revision 1.0) with 491520K/32768K bytes of memory.':'cisco WS-C2960-24TT-L (PowerPC405) processor with 65536K bytes of memory.'}\n\nConfiguration register is ${b}${r!==b?` (will be ${r} at next reload)`:''}`;
@@ -448,10 +518,10 @@ function reach(net,src,ip){
   if(src.type==='router'&&t.dv.type!=='router'&&!ifacesUp(fromR,net).some(x=>sameNet(x.ip,ip,x.mask))&&!routersLinked(net,fromR,toR))return false;
   return routersLinked(net,fromR,toR);
 }
-function pingText(d,ipStr,net,style){
+function pingText(d,ipStr,net,style,count){
   const ok=reach(net,d,ip2n(ipStr));d.pings=d.pings||[];d.pings.push({ip:ipStr,ok});
-  if(style==='pc')return ok?`\nPinging ${ipStr} with 32 bytes of data:\n\n${[1,2,3,4].map(()=>`Reply from ${ipStr}: bytes=32 time<1ms TTL=255`).join('\n')}\n\nPing statistics for ${ipStr}:\n    Packets: Sent = 4, Received = 4, Lost = 0 (0% loss),`
-    :`\nPinging ${ipStr} with 32 bytes of data:\n\n${[1,2,3,4].map(()=>'Request timed out.').join('\n')}\n\nPing statistics for ${ipStr}:\n    Packets: Sent = 4, Received = 0, Lost = 4 (100% loss),`;
+  if(style==='pc')return ok?`\nPinging ${ipStr} with 32 bytes of data:\n\n${[...Array(count||4)].map(()=>`Reply from ${ipStr}: bytes=32 time<1ms TTL=255`).join('\n')}\n\nPing statistics for ${ipStr}:\n    Packets: Sent = ${count||4}, Received = ${count||4}, Lost = 0 (0% loss),`
+    :`\nPinging ${ipStr} with 32 bytes of data:\n\n${[...Array(count||4)].map(()=>'Request timed out.').join('\n')}\n\nPing statistics for ${ipStr}:\n    Packets: Sent = ${count||4}, Received = 0, Lost = ${count||4} (100% loss),`;
   return `Type escape sequence to abort.\nSending 5, 100-byte ICMP Echos to ${ipStr}, timeout is 2 seconds:\n${ok?'!!!!!':'.....'}\nSuccess rate is ${ok?'100 percent (5/5), round-trip min/avg/max = 0/0/1 ms':'0 percent (0/5)'}`;
 }
 /* ---------------- PCs: command prompt with ipconfig, ping and ssh ---------------- */
@@ -473,8 +543,11 @@ function runPC(pc,raw,net){
   if(!r.ok){pc.out.push({t:'Invalid Command.',c:'err'});if(/^ping$/i.test(raw.trim()))pc.out.push({t:'Give an address: ping 192.168.1.1',c:'coach'});
     if(/^ssh/i.test(raw.trim()))pc.out.push({t:'The syntax is ssh -l username ip-address',c:'coach'});return pc.out;}
   pc.history.push(raw.trim());
+  if(r.id==='ipconfig'&&pc.v6){pc.out.push({t:`\nFastEthernet0 Connection:(default port)\n\n   Connection-specific DNS Suffix..: \n   Link-local IPv6 Address.........: ${pc.v6.ll.toUpperCase()}\n   IPv6 Address....................: ${pc.v6.ip.toUpperCase()}\n   IPv4 Address....................: 0.0.0.0\n   Subnet Mask.....................: 0.0.0.0\n   Default Gateway.................: ${pc.v6.gw.toUpperCase()}\n                                     0.0.0.0\n`,c:'out'});return pc.out;}
   if(r.id==='ipconfig'){pc.out.push({t:`\nFastEthernet0 Connection:(default port)\n\n   IPv4 Address......................: ${pc.ip||'0.0.0.0'}\n   Subnet Mask.......................: ${pc.mask||'0.0.0.0'}\n   Default Gateway...................: ${pc.gw||'0.0.0.0'}\n`,c:'out'});return pc.out;}
-  if(r.id==='ping'){pc.out.push({t:pingText(pc,r.args[0],net,'pc'),c:'out'});return pc.out;}
+  if(r.id==='ping'){pc.out.push({t:pingText(pc,r.args[r.args.length-1],net,'pc',r.args.length>1?Number(r.args[0]):4),c:'out'});return pc.out;}
+  if(r.id==='ping6'){const dst=r.args[r.args.length-1],n=r.args.length>1?Number(r.args[0]):4,ok=net&&net.ping6?net.ping6(pc,dst):false;pc.pings=pc.pings||[];pc.pings.push({ip:dst.toLowerCase(),ok});
+    pc.out.push({t:`\nPinging ${dst} with 32 bytes of data:\n\n${[...Array(n)].map(()=>ok?`Reply from ${dst.toUpperCase()}: bytes=32 time<1ms TTL=${ok==='remote'?127:128}`:'Request timed out.').join('\n')}\n\nPing statistics for ${dst.toUpperCase()}:\n    Packets: Sent = ${n}, Received = ${ok?n:0}, Lost = ${ok?0:n} (${ok?0:100}% loss),`,c:'out'});return pc.out;}
   if(r.id==='ssh'){
     const [user,ip]=r.args;const t=net&&owner(net,ip2n(ip));
     pc.sshTries=(pc.sshTries||0)+1;
@@ -495,6 +568,6 @@ const pendingPrompt=d=>{if(d.type==='pc'){const s=d.session[d.session.length-1];
 const activeDev=d=>d.type==='pc'&&d.session.length?d.session[d.session.length-1].dev:d;
 const activeMode=d=>d.type==='pc'?(d.session.length?d.session[d.session.length-1].mode:'pc'):d.mode;
 
-const IOS={ip2n,n2ip,isMask,prefixOf,sameNet,newDevice,prompt,parse,help,complete,run,runningConfig,configText,reach,ifaceName,tokenize,pendingPrompt,activeDev,activeMode,helpOut,G,ifacesUp,clone};
+const IOS={ip2n,n2ip,isMask,prefixOf,sameNet,newDevice,prompt,parse,help,complete,run,runningConfig,configText,reach,ifaceName,tokenize,pendingPrompt,activeDev,activeMode,helpOut,G,ifacesUp,clone,macOf,eui64ll,routesOf,BW,sessionStart};
 if(typeof module!=='undefined'&&module.exports)module.exports=IOS;else root.IOS=IOS;
 })(typeof window!=='undefined'?window:globalThis);

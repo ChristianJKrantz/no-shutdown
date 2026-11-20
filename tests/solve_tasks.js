@@ -8,9 +8,10 @@ for(let round=0;round<25;round++){
     t.goals.forEach((g,gi)=>{
       const d=net.devices[g.dev];
       if(g.where==='pcip'){const m=g.text.match(/: (\S+), mask (\S+), gateway (\S+)/);d.ip=m[1];d.mask=m[2];d.gw=m[3];return;}
+      for(let i=0;i<3&&I.pendingPrompt(d);i++)I.run(d,'cisco',net); // consoles that start at the login prompt
       const steps=C.showMe(g,d);
       steps.forEach(c=>{I.run(d,c,net);const p=I.pendingPrompt(d);if(p&&/^Password/.test(p.prompt)&&c==='enable')I.run(d,secret[d.cfg.hostname]||'class',net);});
-      while(I.pendingPrompt(d))I.run(d,'',net);
+      for(let i=0;i<6&&I.pendingPrompt(d);i++)I.run(d,'',net);
       if(!g.check(net)){ok(false,`${T.id} round ${round}: goal ${gi+1} “${g.text}” didn’t tick after ${JSON.stringify(steps)} (mode ${d.mode})`);}
     });
     const all=t.goals.every(g=>g.check(net));

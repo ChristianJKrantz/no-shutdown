@@ -12,6 +12,20 @@ def type_cmd(pg, cmd):
 
 def solve_task(pg):
     """Work every goal of the open task through the UI, using the task's own Show me steps."""
+    _goals(pg); _questions(pg)
+
+def _questions(pg):
+    """Answer the handout questions some tasks add, through the page."""
+    import re
+    for i in range(pg.evaluate('(NS.Tasks.t.questions||[]).length')):
+        a = pg.evaluate(f'NS.Tasks.t.questions[{i}].answer'); li = pg.locator(f'#tquestions li[data-q="{i}"]')
+        if li.locator('.lab-picks').count():
+            opts = li.locator('.lab-picks button').all_text_contents()
+            li.locator('.lab-picks button').nth(max(range(len(opts)), key=lambda j: a.startswith(opts[j]) * len(opts[j]))).click()
+        else: li.locator('input').fill(re.split(r' \(|, or ', a)[0])
+        li.locator('button:has-text("Check")').click()
+
+def _goals(pg):
     n = pg.evaluate('NS.Tasks.t.goals.length')
     for gi in range(n):
         g = pg.evaluate(f'''(()=>{{const t=NS.Tasks.t,g=t.goals[{gi}],d=t.net.devices[g.dev];
@@ -27,6 +41,9 @@ def solve_task(pg):
             continue
         if pg.locator('.tmain .pcpanel:visible').count():
             pg.click('.tmain .pcpanel:visible .pct button:has-text("Command Prompt")')
+        for _ in range(3):  # a console that starts at the login prompt (the 10.3.4 routers)
+            if pg.text_content('.tmain .term:visible .tp').startswith('Password'): type_cmd(pg, 'cisco')
+            else: break
         for s in g['steps']:
             type_cmd(pg, s)
             pr = pg.text_content('.tmain .term:visible .tp')

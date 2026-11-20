@@ -176,8 +176,18 @@ footer{margin:26px 0 10px;color:var(--muted);font-size:13px;text-align:center}
 
 /* ---------- Packet Tracer lab ---------- */
 .lab .groups{margin:12px 0 4px}
+.nd-grid{grid-template-columns:minmax(0,1.05fr) minmax(0,1fr)}.nd-ctl{gap:10px;margin-bottom:8px}.nd-ctl .groups{margin:0}
+.nd-list{max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:10px}.nd-ev{width:100%}.nd-ev tr[tabindex]{cursor:pointer}.nd-ev tr.on td{background:#00ff6626}.nd-ev tr:hover td{background:#00ff6612}
+.nd-type{font:600 11px var(--mono);padding:2px 6px;border-radius:4px;background:#4dffd022;color:var(--accent2)}.nd-ev tr.icmp .nd-type{background:#00ff6622;color:var(--accent)}
+.nd-pdu{margin-top:10px;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:13px}.nd-pdu-h{font:600 12px var(--mono);color:var(--accent);margin-bottom:4px}.nd-lay{margin-top:8px}.nd-lay>div{margin:3px 0 0 8px;overflow-wrap:anywhere}.nd-lay .k{color:var(--muted);font:11px var(--mono)}.nd-lay .warn{color:var(--warn)}
+.nd-q .nd-part{list-style:none;margin:16px 0 8px -22px;font:600 12px var(--mono);color:var(--accent2);letter-spacing:.04em}
+@media (max-width:900px){.nd-grid{grid-template-columns:minmax(0,1fr)}}
+.tquestions{padding-left:22px;margin:6px 0 12px}.tquestions li{margin:0 0 12px;font-size:14px}.tquestions li.ok .tq-t{color:var(--muted);text-decoration:line-through}.tquestions li.ok input,.tquestions li.ok .btn{opacity:.5}
+.tquestions .row{margin-top:6px}.tquestions input{flex:1;min-width:140px;background:#000;border:1px solid var(--line);border-radius:8px;padding:7px 10px;color:var(--text);font:14px var(--mono)}
+.tq-fb{font-size:13px;margin-top:4px}.tq-fb.good{color:var(--good)}.tq-fb.bad{color:#ffb3bf}.tq-fb.coach{color:var(--warn)}
 .lab .labkind{margin:0 0 14px;padding-bottom:12px;border-bottom:1px dashed var(--line)}.lab .labkind .chip{font-size:14px;padding:8px 14px}
 .lab-req{margin:8px 0 4px;padding-left:20px}.lab-req li{margin:2px 0}
+.lab-q .dbox.picks{display:block;background:none;border:0;padding:0}.lab-picks{display:flex;flex-wrap:wrap;gap:8px;margin:0}.lab-picks .chip{font-size:14px;padding:8px 14px}
 .lab-prompt{font:16px/1.55 Inter,system-ui,sans-serif;margin:12px 0 2px}.lab-prompt .big{font:700 22px var(--mono);color:var(--accent);text-shadow:0 0 10px #00ff6655}
 .lab-prompt b{color:var(--accent2)}
 .topo{display:block;width:100%;max-width:640px;height:auto;margin:12px 0 4px}
@@ -262,6 +272,7 @@ footer{margin:26px 0 10px;color:var(--muted);font-size:13px;text-align:center}
 <script src="ios.js"></script>
 <script src="content.js"></script>
 <script src="lab.js"></script>
+<script src="nd.js"></script>
 <script src="app.js"></script>
 <div id="printArea" aria-hidden="true"></div>
 </body>

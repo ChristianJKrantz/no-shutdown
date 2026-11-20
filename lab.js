@@ -451,6 +451,191 @@ function printVlsmHTML(q,num,key){
     <p class="pp-note">Part 3: configure R1’s LAN interfaces, S3’s VLAN 1 and default gateway, and PC4’s IP settings, then verify with ping.</p></section>`;
 }
 
+/* ---------------- 11.5.5 Subnet an IPv4 Network ----------------
+   One router (CustomerRouter) with two LANs. Subnet a /24 with ONE mask that fits the largest LAN and leaves spare
+   subnets for growth: compare the masks /25–/30, pick the one that meets both, list the subnets, then fill in the
+   Addressing Table. Part 2 (configure and test) is the "subnet-ipv4" task in content.js. */
+const SUBPARTS={all:'Part 1',design:'Step 1: subnetting scheme',table:'Step 2: Addressing Table'};
+const ONES=['The network portion','The host portion','The broadcast address','The default gateway'];
+const MASKS=[25,26,27,28,29,30];
+function subPlan(base,a,b,spare){
+  const need=2+spare;let n=1;while(2**n<need)n++;const p=24+n,blk=2**(8-n),mask=maskOf(p);
+  const subs=[...Array(2**n)].map((_,k)=>{const net=(base+k*blk)>>>0;return {k,net,first:net+1,last:net+blk-2,bc:net+blk-1};});
+  const lans=[{name:'LAN-A',H:a,ifc:'G0/0',sw:'LAN-A Switch',pc:'PC-A',sub:subs[0]},{name:'LAN-B',H:b,ifc:'G0/1',sw:'LAN-B Switch',pc:'PC-B',sub:subs[1]}];
+  const rows=[];lans.forEach(l=>rows.push({dev:'CustomerRouter',ifc:l.ifc,role:'rlan',link:l,ip:l.sub.first}));
+  lans.forEach(l=>rows.push({dev:l.sw,ifc:'VLAN 1',role:'sw',link:l,ip:l.sub.first+1,gw:l.sub.first}));
+  lans.forEach(l=>rows.push({dev:l.pc,ifc:'NIC',role:'pc',link:l,ip:l.sub.last,gw:l.sub.first}));
+  const fitsH=MASKS.filter(q=>2**(32-q)-2>=a),fitsS=MASKS.filter(q=>2**(q-24)>=need);
+  return {kind:'sub',base,a,b,spare,need,n,p,blk,mask,subs,lans,rows,fitsH,fitsS};
+}
+// exactly one mask meets both needs: the most hosts it can give still covers LAN-A, and it just makes enough subnets
+function subFits(a,b,spare){if(!(a>=2&&b>=2&&spare>=1&&a>=b))return false;const need=2+spare;let n=1;while(2**n<need)n++;const p=24+n;return p<=30&&2**(32-p)-2>=a&&(p===30||2**(32-p-1)-2<a);}
+function subFrom(netRaw,aRaw,bRaw,spareRaw){
+  const b0=parseIP(String(netRaw||'').trim().replace(/\/24$/,''));
+  if(b0==null||oct(b0,3)!==0)return {err:'The network must be a /24 that ends in .0, like 192.168.0.0.'};
+  const f=oct(b0,0);if(f===0||f===127||f>=224)return {err:'Use a normal unicast network (first octet 1–223, not 127).'};
+  const [a,b,s]=[aRaw,bRaw,spareRaw].map(x=>String(x||'').trim());
+  if(![a,b,s].every(x=>/^\d{1,3}$/.test(x)))return {err:'Hosts for LAN-A and LAN-B, and the spare subnets, must be whole numbers.'};
+  const A=Number(a),B=Number(b),S=Number(s);
+  if(A<2||B<2)return {err:'Each LAN needs at least 2 hosts.'};if(B>A)return {err:'LAN-A is the larger LAN: give it at least as many hosts as LAN-B.'};
+  if(S<1||S>14)return {err:'Spare subnets: 1 to 14.'};
+  const need=2+S;let n=1;while(2**n<need)n++;const p=24+n,per=2**(32-p)-2;
+  if(p>30||per<A)return {err:`${need} subnets means a /${p}, which gives ${Math.max(0,per)} hosts per subnet: not enough for ${A}. Use fewer hosts or fewer spare subnets.`};
+  if(!subFits(A,B,S))return {err:`More than one mask would fit (a /${p} works, but so does a longer prefix, since ${A} hosts would also fit a /${p+1}). Like the handout, the lab needs exactly one mask: use more hosts on LAN-A, or more spare subnets.`};
+  return {kind:'sub',base:ipStr(b0),a:A,b:B,spare:S};
+}
+function subRandom(){
+  for(;;){const n=R(2,3),need=R(2**(n-1)+1,2**n),spare=need-2,p=24+n,hi=2**(32-p)-2,lo=2**(32-p-1)-1,a=R(lo,hi),b=R(Math.max(2,Math.floor(a*.5)),a-1);
+    if(subFits(a,b,spare)){const r=Math.random();return {kind:'sub',base:r<.6?`192.168.${R(0,255)}.0`:`10.${R(0,255)}.${R(0,255)}.0`,a,b,spare};}}
+}
+const multiSet=v=>new Set(String(v||'').split(/[,\s]+/).map(x=>x.trim()).filter(Boolean).map(x=>x.replace(/^\//,'')));
+function genSubLab(fixed,part){
+  part=SUBPARTS[part]?part:'all';const fx=fixed&&fixed.base?fixed:subRandom();
+  const L=subPlan(parseIP(fx.base),fx.a,fx.b,fx.spare),{base,need,n,p,blk,mask,subs,lans,rows}=L,P=a=>ipStr(a).replace(/\d+$/,'');
+  const inc=k=>part==='all'||part===k,fields=[],add=f=>fields.push(f);
+  if(inc('design')){
+    const w='Step 1 · The requirements';
+    add({key:'big',type:'num',label:'How many host addresses are needed in the largest required subnet?',where:w,answer:L.a});
+    add({key:'need',type:'num',label:'What is the minimum number of subnets required?',where:w,answer:need});
+    add({key:'bin24',type:'bin32',label:`The network you’re subnetting is ${ipStr(base)}/24. What is the /24 subnet mask in binary?`,where:'Step 1 · The mask in binary',answer:'11111111.11111111.11111111.00000000'});
+    add({key:'ones',type:'choice',options:ONES,label:'In the network mask, what do the ones represent?',where:'Step 1 · The mask in binary',answer:ONES[0]});
+    add({key:'zeros',type:'choice',options:ONES,label:'In the network mask, what do the zeros represent?',where:'Step 1 · The mask in binary',answer:ONES[1]});
+    MASKS.forEach(q=>{const w=`Step 1 · The possible masks · /${q}`;
+      add({key:'tdec',q,type:'ip',pre:'255.255.255.',label:`(/${q}) ${'1'.repeat(24).replace(/(.{8})(?=.)/g,'$1.')}.${'1'.repeat(q-24)}${'0'.repeat(32-q)}: dotted decimal mask`,where:w,answer:maskOf(q)});
+      add({key:'tsub',q,type:'num',label:`/${q}: number of subnets?`,where:w,answer:2**(q-24)});
+      add({key:'thost',q,type:'num',label:`/${q}: number of hosts per subnet?`,where:w,answer:2**(32-q)-2});});
+    const opts=MASKS.map(q=>`/${q}`);
+    add({key:'mhost',type:'multi',options:opts,label:`Which subnet masks meet the required minimum of ${L.a} host addresses?`,where:'Step 1 · Choose the mask',answer:L.fitsH.map(q=>'/'+q)});
+    add({key:'msub',type:'multi',options:opts,label:`Which subnet masks meet the minimum of ${need} subnets?`,where:'Step 1 · Choose the mask',answer:L.fitsS.map(q=>'/'+q)});
+    add({key:'mboth',type:'choice',options:opts,label:'Which subnet mask meets both requirements?',where:'Step 1 · Choose the mask',answer:'/'+p});
+    subs.forEach(s=>add({key:'snet',k:s.k,type:'ip',pre:P(s.net),label:`Subnet ${s.k+1} address (/${p}, ${ipStr(mask)})`,where:'Step 1 · List the subnets',answer:s.net}));
+  }
+  if(inc('table')){
+    rows.forEach((r,i)=>{const w=`Step 2 · Addressing Table · ${r.dev}${r.role==='rlan'?' '+r.ifc:''}`;
+      add({key:'aip',r,type:'ip',pre:P(r.ip),label:`${r.dev} ${r.ifc} IP address`,where:w,answer:r.ip});
+      if(i===0)add({key:'amask',r,type:'ip',pre:'255.255.255.',label:'Subnet mask (the same on every device)',where:w,answer:mask});
+      if(r.gw!=null)add({key:'agw',r,type:'ip',pre:P(r.gw),label:`${r.dev} default gateway`,where:w,answer:r.gw});});
+  }
+  // ---------- feedback ----------
+  const RULE={rlan:'The router takes the first host address on each LAN',sw:'The switch takes the second host address',pc:'The PC takes the last host address'};
+  const typo=(u,want)=>{const bad=[0,1,2].filter(k=>oct(u,k)!==oct(want,k));if(!bad.length)return null;return `Check for a typo: ${bad.map(k=>`octet ${k+1} should be ${oct(want,k)}, not ${oct(u,k)}`).join(', and ')}. Every address here starts ${M(P(want))}.`;};
+  const subOf=u=>{const d=(u-base)>>>0;return d<256?Math.floor(d/blk):-1;};
+  function dNum(f,v){const u=toNum(v);if(u===f.answer)return null;if(u==null)return 'Type a whole number.';
+    switch(f.key){
+      case 'big':return u===L.b?`That’s LAN-B. The largest required subnet is LAN-A: ${G(L.a)} hosts.`:`LAN-A is the largest LAN: ${G(L.a)} hosts.`;
+      case 'need':{const how=`LAN-A, LAN-B and ${L.spare} spare subnet${L.spare>1?'s':''} for growth: 2 + ${L.spare} = ${G(need)}.`;
+        if(u===2)return `Those are the LANs you need now. The scenario also asks for spare subnets for future expansion. ${how}`;
+        if(u===L.spare)return `Add the two LANs you need now. ${how}`;
+        if(u===2**n)return `That’s how many subnets the mask makes. The question asks for the minimum you need. ${how}`;return how;}
+      case 'tsub':{const k=f.q-24,how=`/${f.q} borrows ${k} bit${k>1?'s':''} past the /24: 2<sup>${k}</sup> = ${G(2**k)} subnets.`;
+        if(u===2**k-2)return `No − 2 for subnets, only for hosts. ${how}`;if(u===2**(32-f.q)||u===2**(32-f.q)-2)return `That’s from the host bits. Subnets come from the borrowed bits. ${how}`;if(u===k)return `${k} is the number of borrowed bits. ${how}`;return how;}
+      case 'thost':{const h=32-f.q,how=`/${f.q} leaves ${h} host bits: 2<sup>${h}</sup> − 2 = ${G(2**h-2)}.`;
+        if(u===2**h)return `Subtract 2 for the network and broadcast addresses. ${how}`;if(u===2**(f.q-24))return `That’s the number of subnets. Hosts come from the bits left over. ${how}`;return how;}
+    }return null;}
+  function dIP(f,v){const u=parseIP(v);if(u===f.answer)return null;
+    if(f.key==='tdec'||f.key==='amask'){const q=f.key==='amask'?p:f.q,how=`/${q} = ${q-24} ones in the 4th octet: ${[128,64,32,16,8,4,2,1].slice(0,q-24).join(' + ')} = ${G(256-2**(32-q))}, so ${G(ipStr(maskOf(q)))}.`;
+      if(u==null)return badEntry(v,'ip')+' '+how;if(f.key==='amask'&&maskOf(32-0)&&MASKS.some(m=>maskOf(m)===u))return `That’s the /${MASKS.find(m=>maskOf(m)===u)} mask. Every device here uses the mask you chose: /${p}. ${how}`;
+      if(oct(u,3)===2**(32-q))return `${oct(u,3)} is the block size, not the mask. ${how}`;return how;}
+    if(u==null)return badEntry(v,'ip');{const ty=typo(u,f.answer);if(ty)return ty;}
+    const k=subOf(u);
+    if(f.key==='snet'){const how=`The block size is 256 − ${256-blk} = ${blk}, so subnet ${f.k+1} starts at ${f.k} × ${blk} = .${G(oct(f.answer,3))}.`;
+      if(f.k===0&&u!==base)return `The first subnet starts at the network you were given. ${how}`;if(oct(u,3)===f.k+1||oct(u,3)===f.k)return `That’s the subnet number. Write its address. ${how}`;return how;}
+    if(f.key==='aip'){const r=f.r,s=r.link.sub,rule=`${RULE[r.role]}: ${G(ipStr(f.answer))}.`;
+      if(k!==s.k)return `${ipStr(u)} is in subnet ${k+1}, but ${r.dev} is on ${r.link.name}, which gets subnet ${s.k+1} (${ipStr(s.net)}). ${rule}`;
+      if(u===s.net||u===s.bc)return `That’s the ${u===s.net?'subnet':'broadcast'} address, which no device can use. ${rule}`;return rule;}
+    if(f.key==='agw'){const r=f.r,s=r.link.sub,how=`The default gateway is CustomerRouter’s interface on ${r.link.name}, ${r.link.ifc}: ${G(ipStr(f.answer))}.`;
+      if(u===r.ip)return `A device can’t be its own gateway. ${how}`;if(r.role==='pc'&&u===s.first+1)return `That’s the switch. The gateway is the router. ${how}`;return how;}
+    return null;}
+  function dBin(f,v){const t=String(v||'').replace(/[\s.]/g,'');if(t===f.answer.replace(/\./g,''))return null;const how=`/24 = 24 ones, then 8 zeros: ${G(f.answer)}.`;
+    if(!/^[01]+$/.test(t))return `Use only 1s and 0s (dots between the octets are optional). ${how}`;if(t.length!==32)return `That’s ${t.length} bits. A mask is 32: four groups of 8. ${how}`;
+    if(t==='0'.repeat(24)+'1'.repeat(8))return `That’s backwards: the 1s come first. ${how}`;return how;}
+  function dChoice(f,v){if(v===f.answer)return null;
+    if(f.key==='ones')return v===ONES[1]?'That’s the zeros. The ones mark the <b>network</b> portion: the bits every device on the network shares.':'The ones mark the <b>network</b> portion of the address.';
+    if(f.key==='zeros')return v===ONES[0]?'That’s the ones. The zeros mark the <b>host</b> portion: the bits that are different for each device.':'The zeros mark the <b>host</b> portion of the address.';
+    if(f.key==='mboth'){const q=Number(String(v).replace('/',''));const how=`Only ${G('/'+p)} is in both lists: it fits ${L.a} hosts and makes ${2**n} ≥ ${need} subnets.`;
+      if(L.fitsH.includes(q))return `/${q} fits the hosts, but makes only ${2**(q-24)} subnets. ${how}`;if(L.fitsS.includes(q))return `/${q} makes enough subnets, but only ${2**(32-q)-2} hosts each. ${how}`;return how;}
+    return null;}
+  function dMulti(f,v){const S=multiSet(v),want=new Set(f.answer.map(x=>x.slice(1)));if(S.size===want.size&&[...S].every(x=>want.has(x)))return null;
+    const extra=[...S].filter(x=>!want.has(x)),miss=[...want].filter(x=>!S.has(x));
+    const how=f.key==='mhost'?`A mask fits if 2<sup>host bits</sup> − 2 ≥ ${L.a}: check the hosts column of your table.`:`A mask fits if 2<sup>borrowed bits</sup> ≥ ${need}: check the subnets column of your table.`;
+    if(!S.size)return `Pick every mask that works. ${how}`;
+    if(extra.length)return `${extra.map(x=>'/'+x).join(', ')} ${extra.length>1?'don’t':'doesn’t'} work: ${extra.map(x=>f.key==='mhost'?`/${x} gives ${2**(32-x)-2} hosts`:`/${x} makes ${2**(x-24)} subnets`).join('; ')}. ${how}`;
+    return `You missed ${miss.length>1?'some masks':'a mask'} that work${miss.length>1?'':'s'}. Every mask that meets the requirement counts. ${how}`;}
+  const diag=x=>fields.map((f,i)=>{const v=x[i];if(f.type==='num')return dNum(f,v);if(f.type==='bin32')return dBin(f,v);if(f.type==='choice')return dChoice(f,v);if(f.type==='multi')return dMulti(f,v);return dIP(f,v);});
+  // ---------- hints ----------
+  const walk=()=>{const st=[];fields.forEach((f,i)=>{const fin=o=>st.push(Object.assign({f:i,tip:''},o));
+    switch(f.key){
+      case 'big':fin({q:`Compare the LANs: LAN-A needs ${L.a} hosts, LAN-B ${L.b}. Which is larger?`});break;
+      case 'need':fin({q:'Count the LANs you need now, then add the spare subnets the scenario asks for.'});break;
+      case 'bin24':fin({q:'/24 means 24 ones, then the rest zeros. Write all 32 bits in four groups of 8.'});break;
+      case 'ones':case 'zeros':fin({q:'A mask splits an address in two: the bits the whole network shares, and the bits each device uses.'});break;
+      case 'tdec':fin({q:`Add the place values of the 1s in the 4th octet (128, 64, 32, 16, 8, 4, 2, 1).`,tip:'Mask ladder: /25 = 128, /26 = 192, /27 = 224, /28 = 240, /29 = 248, /30 = 252.'});break;
+      case 'tsub':fin({q:`Borrowed bits = ${f.q} − 24. Subnets = 2<sup>borrowed bits</sup>.`});break;
+      case 'thost':fin({q:`Host bits = 32 − ${f.q}. Hosts = 2<sup>host bits</sup> − 2.`});break;
+      case 'mhost':fin({q:`Look down your hosts column: pick every mask with at least ${L.a}.`});break;
+      case 'msub':fin({q:`Look down your subnets column: pick every mask with at least ${need}.`});break;
+      case 'mboth':fin({q:'Which mask is in both of your answers above?'});break;
+      case 'snet':fin({q:f.k===0?'The first subnet starts at the network you were given.':`Each subnet starts ${blk} after the last one (256 − ${256-blk}).`});break;
+      case 'aip':fin({q:`${f.r.dev} is on ${f.r.link.name}, subnet ${f.r.link.sub.k+1} (${ipStr(f.r.link.sub.net)} to ${ipStr(f.r.link.sub.bc)}). ${RULE[f.r.role]}.`});break;
+      case 'amask':fin({q:`Every device uses the mask you chose in Step 1: /${p}.`});break;
+      case 'agw':fin({q:`The gateway is CustomerRouter’s ${f.r.link.ifc}, the first host address on ${f.r.link.name}.`});break;
+    }});return st;};
+  // ---------- tables, worked answers ----------
+  const maskTable=`<table class="sol chartsol"><tr><th>Prefix</th><th>Mask</th><th>Subnets</th><th>Hosts each</th><th>Fits ${L.a} hosts?</th><th>≥ ${need} subnets?</th></tr>${MASKS.map(q=>`<tr><td>/${q}</td><td class="mono">${ipStr(maskOf(q))}</td><td>${2**(q-24)}</td><td>${2**(32-q)-2}</td><td>${L.fitsH.includes(q)?'✓':''}</td><td>${L.fitsS.includes(q)?'✓':''}</td></tr>`).join('')}</table>`;
+  const subTable=`<table class="sol chartsol"><tr><th>Subnet</th><th>Address</th><th>Prefix</th><th>Mask</th></tr>${subs.map(s=>`<tr><td>${s.k+1}</td><td class="mono">${ipStr(s.net)}</td><td>/${p}</td><td class="mono">${ipStr(mask)}</td></tr>`).join('')}</table>`;
+  const addrTable=rs=>`<table class="sol chartsol"><tr><th>Device</th><th>Interface</th><th>IP address</th><th>Subnet mask</th><th>Default gateway</th></tr>${rs.map(r=>`<tr><td>${r.dev}</td><td>${r.ifc}</td><td class="mono">${ipStr(r.ip)}</td><td class="mono">${ipStr(mask)}</td><td class="mono">${r.gw!=null?ipStr(r.gw):'N/A'}</td></tr>`).join('')}</table>`;
+  const explain=[inc('design')?`<p><b>Step 1.</b> Largest LAN: <b>${L.a}</b> hosts. Subnets: 2 LANs + ${L.spare} spare = <b>${need}</b>. Only <b>/${p}</b> (${ipStr(mask)}) meets both.</p>${maskTable}${subTable}`:'',
+    inc('table')?`<p><b>Step 2.</b> LAN-A gets the first subnet and LAN-B the second. The router takes the first host address, the switch the second, the PC the last.</p>${addrTable(rows)}`:''].join('');
+  const scen=`You’re installing a network for a customer. Subnet <b class="big">${ipStr(base)}/24</b> with one mask for every subnet:<ul class="lab-req"><li><b>LAN-A</b> needs at least <b>${L.a}</b> host addresses</li><li><b>LAN-B</b> needs at least <b>${L.b}</b> host addresses</li><li>at least <b>${L.spare}</b> more subnet${L.spare>1?'s':''}, unused, for future expansion</li></ul>`;
+  const topo=`<svg class="topo" viewBox="0 0 640 170" role="img" aria-label="Topology: CustomerRouter G0/0 to LAN-A Switch and PC-A, G0/1 to LAN-B Switch and PC-B, S0/1/0 to the ISP">
+    <line class="tl wan" x1="320" y1="34" x2="560" y2="34"/><text class="tt" x="350" y="26">S0/1/0</text><rect class="tpc" x="540" y="20" width="80" height="28" rx="4"/><text class="tn" x="580" y="39" text-anchor="middle">ISP</text>
+    <line class="tl" x1="320" y1="34" x2="170" y2="100"/><line class="tl" x1="320" y1="34" x2="470" y2="100"/>
+    <text class="tt" x="236" y="60" text-anchor="end">G0/0</text><text class="tt" x="404" y="60">G0/1</text>
+    <rect class="tsw" x="110" y="88" width="120" height="24" rx="4"/><text class="tn" x="170" y="104" text-anchor="middle">LAN-A Switch</text>
+    <rect class="tsw" x="410" y="88" width="120" height="24" rx="4"/><text class="tn" x="470" y="104" text-anchor="middle">LAN-B Switch</text>
+    <line class="tl" x1="170" y1="112" x2="170" y2="138"/><line class="tl" x1="470" y1="112" x2="470" y2="138"/>
+    <rect class="tpc" x="140" y="138" width="60" height="26" rx="3"/><text class="tn" x="170" y="155" text-anchor="middle">PC-A</text>
+    <rect class="tpc" x="440" y="138" width="60" height="26" rx="3"/><text class="tn" x="470" y="155" text-anchor="middle">PC-B</text>
+    <circle class="trt" cx="320" cy="34" r="20"/><text class="tn" x="320" y="38" text-anchor="middle">R</text><text class="tn" x="294" y="20" text-anchor="end">CustomerRouter</text></svg>`;
+  const given=part==='table'?`<details class="fs-ref" open><summary>Step 1, done for you</summary><div class="tablewrap">${subTable}</div></details>`:'';
+  function sheet(ctx){
+    const {end,cur,miss,justDone,ipCell}=ctx,done=j=>j<end,cls=j=>`${miss[j]?' miss':''}${j===justDone?' pop':''}`;
+    const val=j=>{const g=fields[j];return g.type==='ip'?ipCell(g.answer):g.type==='multi'?g.answer.join(', '):String(g.answer);};
+    const cell=j=>j==null?'':done(j)?`<span class="fs-cv${cls(j)}">${val(j)}</span>`:j===cur?'<span class="fs-cur">?</span>':'';
+    const find=(key,pred)=>{const j=fields.findIndex(g=>g.key===key&&(!pred||pred(g)));return j<0?null:j;};
+    const key=(fields[cur<0?fields.length-1:cur]||{}).key,out=[];
+    if(inc('design')&&!['aip','amask','agw'].includes(key)){
+      const top=['big','need','bin24','ones','zeros'].map(k=>find(k)).filter(j=>j!=null&&done(j));
+      if(top.length)out.push(`<div class="fs-sec">Requirements</div>${top.map(j=>`<div class="fs-row${cls(j)}"><span>${{big:'Largest subnet',need:'Subnets needed',bin24:'/24 in binary',ones:'Ones',zeros:'Zeros'}[fields[j].key]}</span><b class="mono">${val(j)}</b></div>`).join('')}`);
+      const t0=find('tdec');if(t0!=null&&t0<=Math.max(end-1,cur))out.push(`<div class="fs-sec">Possible masks</div><div class="tablewrap"><table class="fs-chart"><tr><th>Prefix</th><th>Mask</th><th>Subnets</th><th>Hosts</th></tr>${MASKS.map(q=>`<tr><td class="fs-rl">/${q}</td><td>${cell(find('tdec',g=>g.q===q))}</td><td>${cell(find('tsub',g=>g.q===q))}</td><td>${cell(find('thost',g=>g.q===q))}</td></tr>`).join('')}</table></div>`);
+      const m=['mhost','msub','mboth'].map(k=>find(k)).filter(j=>j!=null&&j<=Math.max(end-1,cur));
+      if(m.length)out.push(m.map(j=>`<div class="fs-row"><span>${{mhost:'Fit the hosts',msub:'Enough subnets',mboth:'Meets both'}[fields[j].key]}</span><b class="mono">${cell(j)}</b></div>`).join(''));
+      const s0=find('snet');if(s0!=null&&s0<=Math.max(end-1,cur))out.push(`<div class="fs-sec">Subnets</div><div class="tablewrap"><table class="fs-chart"><tr><th>#</th><th>Address</th><th>Prefix</th></tr>${subs.map(s=>{const j=find('snet',g=>g.k===s.k);return j>Math.max(end-1,cur)?'':`<tr><td class="fs-rl">${s.k+1}</td><td>${cell(j)}</td><td>/${p}</td></tr>`;}).join('')}</table></div>`);
+    } else {
+      if(part==='table')out.push(given);
+      const rs=rows.filter(r=>{const j=find('aip',g=>g.r===r);return j!=null&&j<=Math.max(end-1,cur);}),mj=find('amask');
+      if(rs.length)out.push(`<div class="fs-sec">Addressing Table</div><div class="tablewrap"><table class="fs-chart"><tr><th>Device</th><th>Interface</th><th>IP</th><th>Mask</th><th>Gateway</th></tr>${rs.map(r=>{const gj=find('agw',g=>g.r===r);
+        return `<tr><td class="fs-rl">${r.dev}</td><td>${r.ifc}</td><td>${cell(find('aip',g=>g.r===r))}</td><td>${mj!=null&&done(mj)?`<span class="fs-cv">${ipCell(mask)}</span>`:mj===cur?'<span class="fs-cur">?</span>':''}</td><td>${gj!=null?cell(gj):'<span class="dim">N/A</span>'}</td></tr>`;}).join('')}</table></div>`);
+    }
+    return out.length?`<div class="fsheet">${out.join('')}</div>`:'';
+  }
+  return {kind:'sub',part,L,fields,title:`11.5.5 Subnet an IPv4 Network${part!=='all'?` · ${SUBPARTS[part]}`:''}`,prompt:`${scen}${topo}`,
+    diag,walk,explain,sheet,subTable,addrTable,maskTable,params:{subnet:ipStr(base),hosts:`${L.a},${L.b}`,spare:L.spare}};
+}
+function printSubHTML(q,num,key){
+  const L=q.L,v=x=>key?ipStr(x):'',blank=x=>key?`<b>${x}</b>`:'<span class="pp-line"></span>';
+  return `<section class="pp pp-lab"><div class="pp-head"><b>Lab ${num}</b><span class="pp-given">${ipStr(L.base)}/24</span></div>
+    <p class="pp-intro">Subnet ${ipStr(L.base)}/24 with one mask: LAN-A needs at least ${L.a} hosts, LAN-B at least ${L.b}, plus at least ${L.spare} unused subnet${L.spare>1?'s':''} for future expansion.</p>
+    <h4>Part 1 · Step 1: Subnetting scheme</h4><ol class="pp-qs" type="a"><li>Host addresses needed in the largest subnet: ${blank(L.a)}</li><li>Minimum number of subnets: ${blank(L.need)}</li>
+    <li>/24 mask in binary: ${blank('11111111.11111111.11111111.00000000')}</li><li>The ones represent: ${blank('the network portion')} &nbsp; the zeros: ${blank('the host portion')}</li></ol>
+    <table class="pp-chart pp-addr"><tr><th>Prefix</th><th>Dotted decimal</th><th>Subnets</th><th>Hosts</th></tr>${MASKS.map(m=>`<tr><td>/${m}</td><td>${key?ipStr(maskOf(m)):''}</td><td>${key?2**(m-24):''}</td><td>${key?2**(32-m)-2:''}</td></tr>`).join('')}</table>
+    <ol class="pp-qs" type="a" start="5"><li>Masks that meet the hosts: ${blank(L.fitsH.map(x=>'/'+x).join(', '))}</li><li>Masks that meet the subnets: ${blank(L.fitsS.map(x=>'/'+x).join(', '))}</li><li>The mask that meets both: ${blank('/'+L.p)}</li></ol>
+    <table class="pp-chart pp-addr"><tr><th>Subnet address</th><th>Prefix</th><th>Subnet mask</th></tr>${L.subs.map(s=>`<tr><td>${v(s.net)}</td><td>${key?'/'+L.p:''}</td><td>${v(L.mask)}</td></tr>`).join('')}</table>
+    <h4>Step 2: Addressing Table</h4><table class="pp-chart pp-addr"><tr><th>Device</th><th>Interface</th><th>IP address</th><th>Subnet mask</th><th>Default gateway</th></tr>${L.rows.map(r=>`<tr><td>${r.dev}</td><td>${r.ifc}</td><td>${v(r.ip)}</td><td>${v(L.mask)}</td><td>${key?(r.gw!=null?ipStr(r.gw):'N/A'):''}</td></tr>`).join('')}</table>
+    <p class="pp-note">Rules: LAN-A gets the first subnet, LAN-B the second. The router takes the first host address, the switch the second, the PC the last.</p>
+    <p class="pp-note">Part 2: on CustomerRouter set the enable secret Class123, console password Cisco123 and hostname, address and enable G0/0 and G0/1, and save. Address both switches’ VLAN 1 with a default gateway, and both PCs. Part 3: ping each PC’s gateway, then PC-A to PC-B.</p></section>`;
+}
+
 // typed answers: an IP field shows its first three octets, so a bare last octet (".33" or "33") is enough
 function expand(f,raw){if(!f||!f.pre||raw==null)return raw;
   if(f.type==='cidr'){const m=String(raw).trim().match(/^\.?(\d{1,3})(\s*\/\s*\d{1,2})?$/);return m?f.pre+m[1]+(m[2]||''):raw;}
@@ -459,11 +644,14 @@ function isRight(f,v){
   if(f.type==='bits')return String(v).replace(/[\s.]/g,'')===f.answer;
   if(f.type==='ip')return parseIP(v)===f.answer;
   if(f.type==='cidr'){const c=parseCIDR(v);return !!c&&c.ip===f.answer.ip&&c.p===f.answer.p;}
+  if(f.type==='bin32')return String(v).replace(/[\s.]/g,'')===f.answer.replace(/\./g,'');
+  if(f.type==='choice')return String(v)===f.answer;
+  if(f.type==='multi'){const S=multiSet(v),W=new Set(f.answer.map(x=>x.replace(/^\//,'')));return S.size===W.size&&[...S].every(x=>W.has(x));}
   const s=String(v).replace(/[,\s]/g,'');return /^\d+$/.test(s)&&Number(s)===f.answer;
 }
-const show=f=>f.type==='ip'?ipStr(f.answer):f.type==='cidr'?cidr(f.answer.ip,f.answer.p):String(f.answer);
+const show=f=>f.type==='ip'?ipStr(f.answer):f.type==='cidr'?cidr(f.answer.ip,f.answer.p):f.type==='multi'?f.answer.join(', '):String(f.answer);
 // the hint steps for each question: walk() lists steps in order, and a step with f closes question f
 function hintsFor(q){const out=q.fields.map(()=>[]);let buf=[];q.walk().forEach(s=>{buf.push(s);if(s.f!=null){out[s.f]=buf;buf=[];}});return out;}
-const api={LABPARTS,VLSMPARTS,labFrom,vlsmFrom,genLab,genVlsmLab,printLabHTML,printVlsmHTML,vlsmPlan,hostBits,topoSVG,expand,isRight,show,hintsFor,ipStr,oct,parseIP,bin8,esc,isBlank};
+const api={LABPARTS,VLSMPARTS,SUBPARTS,genSubLab,subFrom,printSubHTML,subPlan,labFrom,vlsmFrom,genLab,genVlsmLab,printLabHTML,printVlsmHTML,vlsmPlan,hostBits,topoSVG,expand,isRight,show,hintsFor,ipStr,oct,parseIP,bin8,esc,isBlank};
 if(typeof module!=='undefined')module.exports=api;else window.LAB=api;
 })();
