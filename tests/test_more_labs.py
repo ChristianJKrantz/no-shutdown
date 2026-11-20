@@ -83,5 +83,11 @@ with sync_playwright() as pw:
     m = page(360, 800, is_mobile=True, has_touch=True); m.goto(URL + '?lab=nd'); m.wait_for_timeout(300)
     cmd(m, 'ping -n 1 2001:db8:acad:2::a'); m.locator('.nd-ev tr[tabindex]').nth(4).click()
     w = m.evaluate("document.documentElement.scrollWidth"); ok(w <= 360, f'the ND lab fits a 360px phone ({w}px)')
+    k = page(); k.goto(URL + '?lab=nd'); k.wait_for_timeout(200)
+    for q, want in [('?lab=192.168.100.0&hosts=25&r1=2&r2=2', 'lab'), ('?vlsm=192.168.72.0&hosts=50,25,12,6', 'vlsm'), ('?subnet=192.168.0.0&hosts=50,40&spare=2', 'sub')]:
+        k.goto(URL + q); k.wait_for_timeout(200); ok(k.evaluate('NS.Lab.kind') == want, f'after the ND lab, a {want} link still opens its own lab')
+    k.goto(URL + '?tab=sandbox'); k.wait_for_timeout(200); k.click('#v-sandbox .dtabs[role=tablist] button:nth-child(2) svg', force=True)
+    ok(k.locator('#v-sandbox .dtabs[role=tablist] button.on').text_content() == 'Switch', 'clicking a device tab’s icon switches tabs')
+    ok(k.locator('.dtabs svg').count() >= 3, 'device tabs use drawn icons, not symbol characters')
     ok(not errs, f'no page errors {errs}')
 print(f'\n{"all passed" if not fails else str(len(fails))+" failed"}'); sys.exit(1 if fails else 0)

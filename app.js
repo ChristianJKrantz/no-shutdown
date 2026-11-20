@@ -6,6 +6,17 @@ const $=(s,r)=>(r||document).querySelector(s),$$=(s,r)=>[...(r||document).queryS
 const store={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v);}catch(e){return d;}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
 function el(tag,attrs,...kids){const e=document.createElement(tag);if(attrs)for(const[k,v]of Object.entries(attrs)){if(v==null||v===false)continue;if(k==='class')e.className=v;else if(k==='text')e.textContent=v;else if(k==='html')e.innerHTML=v;else if(k.startsWith('on'))e.addEventListener(k.slice(2),v);else e.setAttribute(k,v===true?'':v);}
   kids.flat().forEach(k=>{if(k==null||k===false)return;e.append(k.nodeType?k:document.createTextNode(String(k)));});return e;}
+
+/* icons as inline SVG, so they look the same on every phone and computer (some symbol characters show as empty boxes) */
+const ICONS={
+  router:'<circle cx="12" cy="12" r="9"/><path d="M12 5.5v4M10.3 7.2 12 5.5l1.7 1.7M12 18.5v-4M10.3 16.8 12 18.5l1.7-1.7M5.5 12h4M7.2 10.3 5.5 12l1.7 1.7M18.5 12h-4M16.8 10.3l1.7 1.7-1.7 1.7"/>',
+  switch:'<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M7 10h10M15 8l2 2-2 2M17 14H7M9 12l-2 2 2 2"/>',
+  pc:'<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M12 16v4M8 20h8"/>',
+  print:'<path d="M7 9V3h10v6M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><rect x="7" y="14" width="10" height="7"/>',
+  edit:'<path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/>'};
+function ico(name){const s=el('span',{class:'ico','aria-hidden':'true',html:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`});return s;}
+const devIco=d=>ico(d.type==='router'?'router':d.type==='switch'?'switch':'pc');
+
 const add=(p,...kids)=>kids.forEach(k=>{if(k!=null&&k!==false)p.append(k);});
 const isDesktop=()=>window.matchMedia&&matchMedia('(hover:hover) and (pointer:fine)').matches;
 const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
@@ -188,7 +199,7 @@ const Tasks=(()=>{
       const pane=d.type==='pc'?PCPanel(d,t.net,recheck):Terminal(d,t.net,recheck);
       if(d.type!=='pc'){pane.print([{t:`${name} — ${d.type==='router'?'Cisco 1941 router':'Cisco 2960 switch'} console. Press Enter to start; type ? for help.`,c:'sys'}]);}
       sess.terms[name]=pane;pane.root.hidden=i>0;panes.append(pane.root);
-      tabs.append(el('button',{type:'button',role:'tab','aria-selected':String(i===0),class:i===0?'on':'','data-dev':name,text:`${d.type==='router'?'🖧':d.type==='switch'?'⇄':'🖥'} ${name}`,onclick:()=>tabTo(name)}));});
+      tabs.append(el('button',{type:'button',role:'tab','aria-selected':String(i===0),class:i===0?'on':'','data-dev':name,onclick:()=>tabTo(name)},devIco(d),name));});
     main.append(el('div',{class:'nextgoal',id:'nextgoal','aria-live':'polite'}),tabs,panes);if(tableEl){tableEl.classList.add('ttable');main.append(tableEl);}
     recheck(true);
     const first=sess.terms[t.tabs[0]];if(isDesktop())first.focus();
@@ -235,7 +246,7 @@ const Sandbox=(()=>{
     const net={devices:{Router:r,Switch:s,PC1:pc}};const terms={Router:Terminal(r,net),Switch:Terminal(s,net),PC1:PCPanel(pc,net)};
     const tabs=el('div',{class:'dtabs',role:'tablist','aria-label':'Devices'});const panes=el('div');
     Object.entries(terms).forEach(([n,p],i)=>{p.root.hidden=i>0;panes.append(p.root);if(n!=='PC1')p.print([{t:`${n}: a factory-fresh ${n==='Router'?'Cisco 1941 router':'Cisco 2960 switch'}. Router G0/0 — Switch — PC1 are cabled together.`,c:'sys'}]);
-      tabs.append(el('button',{type:'button',role:'tab','aria-selected':String(i===0),class:i===0?'on':'',text:n,onclick:e=>{$$('button',tabs).forEach(b=>{b.classList.toggle('on',b===e.target);b.setAttribute('aria-selected',String(b===e.target));});Object.entries(terms).forEach(([m,q])=>{q.root.hidden=m!==n;});p.focus();}}));});
+      tabs.append(el('button',{type:'button',role:'tab','aria-selected':String(i===0),class:i===0?'on':'',onclick:e=>{const t=e.currentTarget;$$('button',tabs).forEach(b=>{b.classList.toggle('on',b===t);b.setAttribute('aria-selected',String(b===t));});Object.entries(terms).forEach(([m,q])=>{q.root.hidden=m!==n;});p.focus();}},devIco(net.devices[n]),n));});
     root.append(el('div',{class:'row',style:'justify-content:space-between'},el('h2',{text:'Sandbox'}),el('button',{class:'btn small ghost',type:'button',text:'↺ Reset everything',onclick:build})),
       el('p',{class:'dim',text:'No goals, no score: a router, a switch and a PC to try anything on. ? shows what you can type at any prompt.'}),tabs,panes);
     if(isDesktop())terms.Router.focus();
@@ -347,7 +358,7 @@ const NDLab=(()=>{
     ['PCA1','RTA','PCB1'].forEach(n=>{const d=x.net.devices[n];const t=terms[n]||(terms[n]=Terminal(d,x.net,()=>renderSim()));
       if(!t.started){t.print([{t:n==='RTA'?'RTA — Cisco ISR 4321 router console. Try show ipv6 neighbors, clear ipv6 neighbors, ping. Press Enter to start.':`${n} — Desktop › Command Prompt. Try ipconfig, or ping -n 1 2001:db8:acad:1::b`,c:'sys'}]);t.started=true;}
       t.root.hidden=n!==cur;panes.append(t.root);
-      tabs.append(el('button',{type:'button',role:'tab','aria-selected':String(n===cur),class:n===cur?'on':'','data-dev':n,text:`${n==='RTA'?'🖧':'🖥'} ${n}`,onclick:()=>{cur=n;$$('button',tabs).forEach(b=>{b.classList.toggle('on',b.dataset.dev===n);b.setAttribute('aria-selected',String(b.dataset.dev===n));});Object.entries(terms).forEach(([k,p])=>{p.root.hidden=k!==n;});terms[n].focus();}}));});
+      tabs.append(el('button',{type:'button',role:'tab','aria-selected':String(n===cur),class:n===cur?'on':'','data-dev':n,onclick:()=>{cur=n;$$('button',tabs).forEach(b=>{b.classList.toggle('on',b.dataset.dev===n);b.setAttribute('aria-selected',String(b.dataset.dev===n));});Object.entries(terms).forEach(([k,p])=>{p.root.hidden=k!==n;});terms[n].focus();}},devIco(d),n));});
     const addr=el('table',{class:'given'},el('tr',null,...['Device','Interface','IPv6 Address / Prefix','Default Gateway'].map(h=>el('th',{text:h}))),
       ...[['RTA','G0/0/0','2001:db8:acad:1::1/64','N/A'],['RTA','G0/0/1','2001:db8:acad:2::1/64','N/A'],['PCA1','NIC','2001:db8:acad:1::a/64','fe80::1'],['PCA2','NIC','2001:db8:acad:1::b/64','fe80::1'],['PCB1','NIC','2001:db8:acad:2::a/64','fe80::1']].map(row=>el('tr',null,...row.map((c,i)=>el('td',{class:i>=2?'v':'',text:c})))));
     r.append(el('div',{class:'dmeta'},el('span',{text:'PACKET TRACER LAB · 9.3.4 IPV6 NEIGHBOR DISCOVERY'}),el('button',{class:'btn small ghost',type:'button',text:'↺ Start over',onclick:()=>{x=null;terms={};qok=new Set();sel=-1;cur='PCA1';counted=false;Lab.start({kind:'nd'});}})),
@@ -373,7 +384,7 @@ const Lab=(()=>{
   const fixedOf=L=>kind==='vlsm'?{kind:'vlsm',base:ipStr(L.base),hosts:L.hosts.slice()}:kind==='sub'?{kind:'sub',base:ipStr(L.base),a:L.a,b:L.b,spare:L.spare}:{kind:'lab',base:ipStr(L.base),hosts:L.hosts,r1:L.r1,r2:L.r2};
   function setURL(){try{const u=new URL(location.href);u.search='';u.searchParams.set('tab','lab');if(pr)Object.entries(asParams(q.L)).forEach(([a,b])=>u.searchParams.set(a,b));history.replaceState(null,'',u.toString());}catch(e){}}
   function load(fixed){if(kind==='nd'&&!(fixed&&fixed.kind&&fixed.kind!=='nd')){render();return;}if(fixed&&fixed.kind&&KINDS[fixed.kind]&&fixed.kind!==kind){setKind(fixed.kind);store.set('ns_labkind',kind);}if(fixed&&!fixed.base)fixed=null;pr=fixed||null;q=kind==='vlsm'?LAB.genVlsmLab(fixed||null,part):kind==='sub'?LAB.genSubLab(fixed||null,part):LAB.genLab(fixed||null,part);k=0;miss=q.fields.map(()=>false);first=0;justDone=-1;done=false;msg='';hintN=0;setURL();render();}
-  function start(fixed){if(fixed&&fixed.kind==='nd'){setKind('nd');store.set('ns_labkind','nd');render();return;}if(kind==='nd'){render();return;}if(fixed||!q)load(fixed);else render();}
+  function start(fixed){if(fixed&&fixed.kind==='nd'){setKind('nd');store.set('ns_labkind','nd');render();return;}if(kind==='nd'&&!(fixed&&fixed.kind)){render();return;}if(fixed||!q)load(fixed);else render();}
   const ipCell=v=>`<span class="ipf">${ipStr(v)}</span><span class="ips">.${oct(v,3)}</span>`;
   // the tables fill in as you answer (same layout as the lab handout)
   function sheet(){
@@ -478,7 +489,7 @@ const Lab=(()=>{
       el('button',{class:'chip',type:'button',text:`${KINDS[kind].cfg}: configure →`,onclick:toPart2}));
     const pk=el('label',{class:'dim lab-key'},el('input',{type:'checkbox',id:'labKey'}),' with answer key');
     r.append(which,el('div',{class:'dmeta'},el('span',{text:`PACKET TRACER LAB · ${KINDS[kind].name.toUpperCase()}`}),
-        el('span',{class:'row'},el('button',{class:'btn small',type:'button',text:'✎ Your own lab',onclick:own}),el('button',{class:'btn small',type:'button',text:'🖨 Print',onclick:()=>print($('#labKey').checked)}),pk,el('button',{class:'btn small ghost',type:'button',text:'New lab',onclick:()=>load(null)}))),
+        el('span',{class:'row'},el('button',{class:'btn small',type:'button',onclick:own},ico('edit'),'Your own lab'),el('button',{class:'btn small',type:'button',onclick:()=>print($('#labKey').checked)},ico('print'),'Print'),pk,el('button',{class:'btn small ghost',type:'button',text:'New lab',onclick:()=>load(null)}))),
       el('div',{class:'own',id:'labOwn',hidden:true}),seg,
       el('div',{class:'lab-prompt',html:q.prompt}),
       el('div',{class:'lab-grid'},el('div',{id:'labQ',class:'lab-q'}),el('div',{id:'labSheet'})));
