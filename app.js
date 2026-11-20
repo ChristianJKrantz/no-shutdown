@@ -17,6 +17,7 @@ const ICONS={
 function ico(name){const s=el('span',{class:'ico','aria-hidden':'true',html:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`});return s;}
 const devIco=d=>ico(d.type==='router'?'router':d.type==='switch'?'switch':'pc');
 
+const escH=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const add=(p,...kids)=>kids.forEach(k=>{if(k!=null&&k!==false)p.append(k);});
 const isDesktop=()=>window.matchMedia&&matchMedia('(hover:hover) and (pointer:fine)').matches;
 const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
@@ -119,7 +120,7 @@ const Drills=(()=>{
     const chips=el('div',{class:'groups',role:'group','aria-label':'Topics'},...groups.map(g=>el('button',{class:'chip'+(g===group?' on':''),type:'button',text:g,onclick:()=>{group=g;queue=[];nextItem();}})));
     const inp=el('input',{id:'din',autocomplete:'off',autocapitalize:'off',autocorrect:'off',spellcheck:'false','aria-label':'Your command',enterkeyhint:'go',placeholder:'type the command'});
     const fb=el('div',{class:'dfb',id:'dfb','aria-live':'polite'});
-    const check=el('button',{class:'btn primary',type:'button',text:'Check'}),showB=el('button',{class:'btn',type:'button',text:'Show answer'}),skip=el('button',{class:'btn ghost',type:'button',text:'Skip'});
+    const check=el('button',{class:'btn primary',type:'button',text:'Check'}),showB=el('button',{class:'btn',type:'button',text:'Hint'}),skip=el('button',{class:'btn ghost',type:'button',text:'Skip'});
     root.append(el('div',{class:'dmeta'},el('span',{text:`${dr.g} · ${dr.dev==='pc'?'PC':dr.dev==='router'?'router':'switch'}`}),el('span',{text:`Streak ${S.drill.streak} · best ${S.drill.best}`})),chips,
       el('div',{class:'dpurpose',id:'dq',text:txt(dr.purpose,v)}),
       el('div',{class:'dbox'},el('span',{class:'tp',text:IOS.prompt(dev)}),inp),fb,el('div',{class:'dacts'},check,showB,skip),
@@ -147,7 +148,16 @@ const Drills=(()=>{
     };
     check.onclick=answer;inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();answer();}else if(e.key==='Tab'){e.preventDefault();inp.value=IOS.complete(dr.mode==='pc'?'pc':dr.mode,inp.value,dev);}});
     check.addEventListener('keydown',e=>{if(e.key==='Enter'&&fb.dataset.done){e.preventDefault();nextItem();}});
-    showB.onclick=()=>{if(!shown&&!missedNow){S.drill.tried++;S.drill.streak=0;store.set('ns_drill',S.drill);renderStats();queue.splice(Math.min(3,queue.length),0,cur.i);}shown=true;
+    // first a hint: the command's shape with the values as <placeholders> (the values that change between drills),
+    // then the full answer. Either one means the drill comes back later and scores nothing now.
+    const shape=()=>{const a=txt(dr.answer,v).split(' ');if(!dr.gen)return null;const others=[0,1,2,3].map(()=>{const w=dr.gen();return txt(dr.answer,w).split(' ');}).filter(o=>o.length===a.length);
+      if(a[0]==='description')return 'description <text>';if(a[0]==='banner')return 'banner motd #<message>#';
+      const out=a.map((tok,i)=>others.some(o=>o[i]!==tok)?(/^\d+\.\d+\.\d+\.\d+$/.test(tok)?(/^255\./.test(tok)?'<mask>':'<address>'):/^flash:/.test(tok)?'flash:<file name>':/:.*\//.test(tok)?'<IPv6 address>/<prefix>':'<value>'):tok).join(' ');return out===a.join(' ')?null:out;};
+    let hinted=false;
+    showB.onclick=()=>{if(!hinted&&!shown){const sp=shape();hinted=true;showB.textContent='Show answer';
+        if(sp){if(!missedNow){missedNow=true;S.drill.tried++;S.drill.streak=0;store.set('ns_drill',S.drill);renderStats();queue.splice(Math.min(3,queue.length),0,cur.i);}
+          fb.textContent='';add(fb,el('div',{class:'out',text:'The command looks like this. The values come from the task above.'}),el('div',{class:'ans',text:sp}));inp.focus();return;}}
+      if(!shown&&!missedNow){S.drill.tried++;S.drill.streak=0;store.set('ns_drill',S.drill);renderStats();queue.splice(Math.min(3,queue.length),0,cur.i);}shown=true;
       fb.textContent='';const sh=txt(dr.short,v);add(fb,el('div',{class:'ans',text:txt(dr.answer,v)}),sh?el('div',{class:'dim',text:`Shortcut: ${sh}`}):null,dr.note?el('div',{class:'dim',text:dr.note}):null,el('div',{class:'dim',text:'Type it in to move on.'}));inp.focus();};
     skip.onclick=nextItem;
     if(isDesktop())inp.focus({preventScroll:true});
@@ -167,7 +177,7 @@ const Tasks=(()=>{
   function setURL(id,params){try{const u=new URL(location.href);u.search='';u.searchParams.set('task',id);if(params)Object.entries(params).forEach(([k,v])=>u.searchParams.set(k,v));history.replaceState(null,'',u.toString());}catch(e){}}
   function open(id,params){
     T=CS.TASKS.find(x=>x.id===id);if(!T){list();return;}
-    t=T.build(params);sess={start:Date.now(),showme:0,done:false,ok:new Set(),terms:{},qok:new Set()};
+    t=T.build(params);sess={start:Date.now(),showme:0,help:{words:0,syntax:0,exact:0},lvl:{},done:false,ok:new Set(),terms:{},qst:{ok:new Set(),helped:new Set(),tries:{},hint:{}}};sess.qok=sess.qst.ok;
     if(t.params)setURL(id,t.params);
     root.textContent='';
     const side=el('div',{class:'card tside'}),main=el('div',{class:'card tmain'});root.append(el('div',{class:'tview'},side,main));
@@ -181,18 +191,8 @@ const Tasks=(()=>{
     const ul=el('ul',{class:'goals',id:'goals'},...t.goals.map((g,i)=>el('li',{'data-i':i},el('i',{'aria-hidden':'true'}),el('span',null,g.text,t.tabs.length>1?el('span',{class:'dv',text:g.dev}):null))));
     const sm=el('div',{id:'showme'}),banner=el('div',{id:'banner'});
     // questions from the handout, checked against the devices as they are now
-    const qs=!t.questions?null:el('ol',{class:'tquestions',id:'tquestions'},...t.questions.map((q,i)=>{
-      const fb=el('div',{class:'tq-fb'});let val='';
-      const inp=q.options?null:el('input',{type:'text','aria-label':q.text,autocomplete:'off',spellcheck:'false',autocapitalize:'off',placeholder:'your answer'});
-      const ask=()=>{const v=inp?inp.value:val;if(!String(v).trim()){fb.textContent='Type an answer first.';fb.className='tq-fb coach';return;}
-        let ok=false;try{ok=!!q.check(v,t.net);}catch(e){}
-        if(ok){sess.qok.add(i);li.classList.add('ok');fb.textContent='✓ Right';fb.className='tq-fb good';recheck();}
-        else{fb.textContent=q.how?`Not quite. Find it with ${q.how}.`:'Not quite. Try again.';fb.className='tq-fb bad';}};
-      if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();ask();}});
-      const picks=q.options?el('div',{class:'groups lab-picks'},...q.options.map(o=>el('button',{class:'chip',type:'button',text:o,onclick:e=>{val=o;$$('button',picks).forEach(b=>b.classList.toggle('on',b===e.target));}}))):null;
-      const li=el('li',{'data-q':i},el('span',{class:'tq-t',text:q.text}),el('div',{class:'row'},inp,picks,el('button',{class:'btn small',type:'button',text:'Check',onclick:ask})),fb);
-      return li;}));
-    side.append(el('h3',{text:'Goals'}),ul,...(qs?[el('h3',{text:'Questions'}),qs]:[]),banner,sm,el('div',{class:'row'},el('button',{class:'btn small',type:'button',id:'showBtn',text:'💡 Show me the next step',onclick:showMe}),el('button',{class:'btn small ghost',type:'button',text:'↺ Start over (new values)',onclick:()=>open(T.id,t.params)})));
+    const qs=!t.questions?null:el('ol',{class:'tquestions',id:'tquestions'},...t.questions.map((q,i)=>TeachQ({text:q.text,options:q.options,check:v=>q.check(v,t.net),get answer(){return q.answer;},look:q.look||(q.how?`Use ${q.how}.`:null),why:q.why},i,sess.qst,()=>{sess.qok=sess.qst.ok;recheck();})));
+    side.append(el('h3',{text:'Goals'}),ul,...(qs?[el('h3',{text:'Questions'}),qs]:[]),banner,sm,el('div',{class:'row'},el('button',{class:'btn small',type:'button',id:'showBtn',text:'💡 Help with the next step',onclick:()=>showMe(1)}),el('button',{class:'btn small ghost',type:'button',text:'↺ Start over (new values)',onclick:()=>open(T.id,t.params)})));
     // main: device tabs and a terminal or PC panel for each
     const tabs=el('div',{class:'dtabs',role:'tablist'}),panes=el('div');
     t.tabs.forEach((name,i)=>{const d=t.net.devices[name];
@@ -213,26 +213,44 @@ const Tasks=(()=>{
     const all=t.goals.every(g=>{try{return g.check(t.net);}catch(e){return false;}})&&(!t.questions||sess.qok.size===t.questions.length);
     const nx=t.goals.find(g=>{try{return !g.check(t.net);}catch(e){return true;}}),ng=$('#nextgoal');
     if(ng){ng.textContent='';if(nx)ng.append(el('b',{text:'Next goal '}),el('span',{text:nx.text}),...(t.tabs.length>1?[el('span',{class:'dv',text:` · ${nx.dev}`})]:[]));else if(t.questions&&sess.qok.size<t.questions.length)ng.append(el('b',{text:'Next '}),el('span',{text:`answer the questions (${t.questions.length-sess.qok.size} left)`}));else ng.append(el('b',{text:'All goals done ✓'}));}
-    if(all&&!sess.done){sess.done=true;const stars=sess.showme===0?3:sess.showme<=2?2:1,mins=Math.max(1,Math.round((Date.now()-sess.start)/60000));
+    if(all&&!sess.done){sess.done=true;const stars=sess.showme===0?3:sess.showme<=4?2:1,mins=Math.max(1,Math.round((Date.now()-sess.start)/60000));
       const prev=S.tasks[T.id]||{};S.tasks[T.id]={done:true,stars:Math.max(stars,prev.stars||0)};store.set('ns_tasks',S.tasks);renderStats();
       const b=$('#banner');b.textContent='';b.append(el('div',{class:'done-banner'},el('b',{text:'Task complete! '}),el('span',{class:'stars',text:'★'.repeat(stars)+'☆'.repeat(3-stars)}),
-        el('div',{class:'dim',text:`${sess.showme?`Used Show me ${sess.showme} time${sess.showme>1?'s':''}`:'No hints'} · about ${mins} min`}),
+        el('div',{class:'dim',text:`${sess.showme?'Help used: '+[[sess.help.words,'nudge'],[sess.help.syntax,'syntax'],[sess.help.exact,'exact command']].filter(([n])=>n).map(([n,w])=>`${n} ${w}${n>1&&w!=='syntax'?'s':''}`).join(', '):'No help used'} · about ${mins} min`}),
         el('div',{class:'row',style:'margin-top:8px'},el('button',{class:'btn small primary',type:'button',text:'Again with new values',onclick:()=>open(T.id,T.id==='scenario'?t.params:undefined)}),el('button',{class:'btn small',type:'button',text:'Next task →',onclick:()=>{const i=CS.TASKS.indexOf(T);const n=CS.TASKS[(i+1)%CS.TASKS.length];setURL(n.id);open(n.id);}}))));
       $('#showme').textContent='';}
     if(!all&&sess.done){/* undone after finishing: keep the banner; it was earned */}
   }
-  function showMe(){
-    const i=t.goals.findIndex(g=>{try{return !g.check(t.net);}catch(e){return true;}});
-    if(i<0){if(!t.questions)return;const j=t.questions.findIndex((q,k)=>!sess.qok.has(k));if(j<0)return;sess.showme++;const q=t.questions[j],box=$('#showme');box.textContent='';
-      box.append(el('div',{class:'showme'},el('div',{text:`Question ${j+1}:`}),el('div',{class:'mono',text:q.answer}),q.how?el('div',{class:'dim',text:`(from ${q.how})`}):null));return;}
-    const g=t.goals[i],d=t.net.devices[g.dev];sess.showme++;
-    const box=$('#showme');box.textContent='';
-    if(g.where==='pcip'){box.append(el('div',{class:'showme'},el('div',{text:`On ${g.dev}, open IP Configuration and fill in:`}),el('div',{class:'mono',text:g.text.replace(/^[^:]+:\s*/,'')})));tabTo(g.dev);if(sess.terms[g.dev].show)sess.terms[g.dev].show('ip');return;}
-    const steps=CS.showMe(g,d.type==='pc'?d:d);
-    const secretNote=steps.includes('enable')&&d.cfg&&(d.cfg.enableSecret||d.cfg.enablePassword)?' (it will ask for the enable secret)':'';
-    box.append(el('div',{class:'showme'},el('div',{text:`On ${g.dev}, from ${IOS.prompt(d.type==='pc'?d:d)} type:`}),el('ol',null,...steps.map(s=>el('li',{text:s===''?'(press Enter to confirm)':s}))),secretNote?el('div',{class:'dim',text:secretNote}):null,
-      g.where==='pc'?el('div',{class:'dim',text:'Use the PC’s Command Prompt.'}):null));
-    tabTo(g.dev);if(sess.terms[g.dev].show)sess.terms[g.dev].show('cmd');
+  // Help comes in three levels per goal: what to do in words, then the command syntax with placeholders, then the exact
+  // commands. Each level costs a little toward the stars. Questions get their hints instead of their answers.
+  function showMe(want){
+    const i=t.goals.findIndex(g=>{try{return !g.check(t.net);}catch(e){return true;}});const box=$('#showme');box.textContent='';
+    if(i<0){if(!t.questions)return;const j=t.questions.findIndex((q,k)=>!sess.qst.ok.has(k));if(j<0)return;
+      const li=$(`#tquestions li[data-q="${j}"]`);const hb=li&&$$('button',li).find(b=>b.textContent==='Hint'&&!b.hidden);
+      if(hb){hb.click();sess.showme++;sess.help.words++;}
+      box.append(el('div',{class:'showme'},el('div',{text:hb?`Question ${j+1}: a hint is open under it.`:`Question ${j+1}: you’ve seen every hint. Try an answer; after two tries you can unlock it.`})));
+      if(li)li.scrollIntoView({block:'center',behavior:'smooth'});return;}
+    const g=t.goals[i],d=t.net.devices[g.dev];
+    const cur=sess.lvl[i]||0,lv=Math.min(3,Math.max(cur+1,want||1));
+    if(lv>cur){sess.showme+=lv===3?2:1;sess.help[lv===1?'words':lv===2?'syntax':'exact']++;sess.lvl[i]=lv;}
+    tabTo(g.dev);
+    if(g.where==='pcip'){const parts=g.text.replace(/^[^:]+:\s*/,'');
+      box.append(el('div',{class:'showme'},el('div',{text:`On ${g.dev}, open Desktop › IP Configuration and fill in the address, mask and gateway${sess.lvl[i]>=2?':':' from the Addressing Table.'}`}),sess.lvl[i]>=2?el('div',{class:'mono',text:parts}):null,
+        sess.lvl[i]<2?el('div',{class:'dim',text:'A PC’s gateway is its router’s address on the PC’s own LAN.'}):null,sess.lvl[i]<2?el('button',{class:'btn small ghost',type:'button',text:'Show the values',onclick:()=>showMe(2)}):null));
+      if(sess.terms[g.dev].show)sess.terms[g.dev].show('ip');return;}
+    const H=CS.helpSteps(g,d,t);
+    const secretNote=H.exact.includes('enable')&&d.cfg&&(d.cfg.enableSecret||d.cfg.enablePassword)?' (it will ask for the enable secret)':'';
+    const L=sess.lvl[i];
+    const body=L===1?el('ol',{class:'help-words'},...H.words.map(w=>el('li',{html:w})))
+      :el('ol',null,...(L===2?H.syntax:H.exact).map(x=>el('li',{class:'mono',text:x===''?'(press Enter to confirm)':x})));
+    box.append(el('div',{class:'showme'},
+      el('div',{text:L===1?`On ${g.dev}, starting from ${IOS.prompt(d)}:`:L===2?`On ${g.dev}, from ${IOS.prompt(d)}, the commands look like this (fill in the <values>):`:`On ${g.dev}, from ${IOS.prompt(d)} type:`}),body,
+      L===1?el('div',{class:'dim',text:'Not sure of a command’s name? Type the start of it and ? at the prompt.'}):null,
+      L===2?el('div',{class:'dim',text:'The values are in the goal, the given table or the Addressing Table.'}):null,
+      L===3&&secretNote?el('div',{class:'dim',text:secretNote}):null,
+      g.where==='pc'?el('div',{class:'dim',text:'Use the PC’s Command Prompt.'}):null,
+      L<3?el('div',{class:'row'},el('button',{class:'btn small ghost',type:'button',text:L===1?'Show the syntax':'Show the exact commands',onclick:()=>showMe(L+1)})):null));
+    if(sess.terms[g.dev].show)sess.terms[g.dev].show('cmd');
   }
   return {list,open,get t(){return t;},get sess(){return sess;}};
 })();
@@ -271,45 +289,98 @@ if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceW
 
 
 
+
+/* A question that teaches before it tells. Hint shows where to look, then the idea behind it. A wrong answer opens the
+   next hint by itself. The answer only unlocks after two wrong tries or both hints, comes with the reasoning, and still
+   has to be entered; it then counts as "with help", not "on your own". q: {text, options?, check(v), answer, look?, why?} */
+function TeachQ(q,num,st,onRight){
+  // st: {ok:Set, helped:Set, tries:{}, hint:{}} shared per question list; num is the question's index
+  const fb=el('div',{class:'tq-fb'}),hints=el('div',{class:'tq-hints'});let val='';
+  const H=[q.look&&['Where to look',q.look],q.why&&['Think about it',q.why]].filter(Boolean);
+  const inp=q.options?null:el('input',{type:'text','aria-label':q.text,autocomplete:'off',spellcheck:'false',autocapitalize:'off',placeholder:'your answer'});
+  const picks=q.options?el('div',{class:'groups lab-picks'},...q.options.map(o=>el('button',{class:'chip',type:'button',text:o,onclick:e=>{val=o;$$('button',picks).forEach(b=>b.classList.toggle('on',b===e.currentTarget));}}))):null;
+  const hintBtn=el('button',{class:'btn small',type:'button',text:'Hint',onclick:()=>{st.hint[num]=Math.min(H.length,(st.hint[num]||0)+1);paint();}});
+  const showBtn=el('button',{class:'btn small ghost',type:'button',text:'Show the answer',onclick:()=>{st.helped.add(num);st.shown=st.shown||new Set();st.shown.add(num);fb.textContent='';fb.className='tq-fb';if(inp){inp.value='';}paint();if(inp)inp.focus();}});
+  const li=el('li',{value:String(num+1),'data-q':String(num)},el('span',{class:'tq-t',text:q.text}),el('div',{class:'row'},inp,picks,el('button',{class:'btn small',type:'button',text:'Check',onclick:ask}),hintBtn,showBtn),hints,fb);
+  function unlocked(){return (st.tries[num]||0)>=2||((st.hint[num]||0)>=H.length&&(st.tries[num]||0)>=1)||!H.length&&(st.tries[num]||0)>=1;}
+  function paint(){
+    const h=st.hint[num]||0;hints.textContent='';
+    H.slice(0,h).forEach(([k,t])=>hints.append(el('div',{class:'tq-hint'},el('b',{text:k+': '}),el('span',{html:t}))));
+    if(st.shown&&st.shown.has(num)&&!st.ok.has(num))hints.append(el('div',{class:'tq-hint ans'},el('b',{text:'Answer: '}),el('span',{text:q.answer}),q.why&&h<H.length?el('div',{class:'dim',html:q.why}):null,el('div',{class:'dim',text:inp?'Type it in to finish this one.':'Pick it to finish this one.'})));
+    hintBtn.hidden=st.ok.has(num)||h>=H.length;showBtn.hidden=st.ok.has(num)||!unlocked()||(st.shown&&st.shown.has(num));
+    li.className=st.ok.has(num)?(st.helped.has(num)?'ok helped':'ok'):'';
+  }
+  function ask(){const v=inp?inp.value:val;if(!String(v).trim()){fb.textContent=inp?'Type an answer first.':'Pick an answer first.';fb.className='tq-fb coach';return;}
+    let ok=false;try{ok=!!q.check(v);}catch(e){}
+    if(ok){st.ok.add(num);fb.textContent=st.helped.has(num)?'✓ Right (with help)':'✓ Right, on your own';fb.className='tq-fb good';paint();if(onRight)onRight();return;}
+    st.tries[num]=(st.tries[num]||0)+1;
+    if((st.hint[num]||0)<H.length)st.hint[num]=(st.hint[num]||0)+1;
+    fb.textContent=unlocked()&&!(st.shown&&st.shown.has(num))?'Not quite. Read the hints; if you’re still stuck, the answer is unlocked.':'Not quite. Here’s a hint.';fb.className='tq-fb bad';paint();}
+  if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();ask();}});
+  if(st.ok.has(num)){fb.textContent=st.helped.has(num)?'✓ Right (with help)':'✓ Right, on your own';fb.className='tq-fb good';}
+  paint();return li;
+}
+
 /* ---------------- 9.3.4 IPv6 Neighbor Discovery: simulation mode, event list, PDU details, questions ---------------- */
 const NDLab=(()=>{
-  let x=null,sim=true,sel=-1,qok=new Set(),terms={},root=null,cur='PCA1',counted=false;
+  let x=null,sim=true,sel=-1,qst=null,terms={},root=null,cur='PCA1',counted=false;const fresh=()=>({ok:new Set(),helped:new Set(),tries:{},hint:{}});qst=fresh();
   const macN=v=>String(v||'').toLowerCase().replace(/[^0-9a-f]/g,'');
   const ipQ=want=>v=>ND.same(String(v).trim(),want);
   const macQ=want=>v=>macN(v)===macN(want);
   const numQ=f=>v=>/^\s*\d+\s*$/.test(String(v))&&Number(v)===f();
   const pick=(opts,right)=>{const o=opts.slice();let h=0;for(const c of right)h=(h*31+c.charCodeAt(0))>>>0;for(let i=o.length-1;i>0;i--){h=(h*1103515245+12345)>>>0;const j=h%(i+1);[o[i],o[j]]=[o[j],o[i]];}return {options:o,check:v=>v===right,answer:right};};
   function questions(){
-    const A=x.PCA1.v6,B=x.PCA2.v6,C=x.PCB1.v6,g0=x.RTA.macs['GigabitEthernet0/0/0'],g1=x.RTA.macs['GigabitEthernet0/0/1'];
+    const A=x.PCA1.v6,B=x.PCA2.v6,C=x.PCB1.v6,g0=x.RTA.macs['GigabitEthernet0/0/0'],g1=x.RTA.macs['GigabitEthernet0/0/1'],U=v=>String(v).toUpperCase();
+    const ev='the event list (click an event to open its PDU)';
     return [
-      {part:'Part 1: a host on the same LAN (ping -n 1 2001:db8:acad:1::b from PCA1, in simulation mode)'},
-      {text:'Why are ND PDUs present?',...pick(['PCA1 doesn’t know PCA2’s MAC address yet','PCA1 doesn’t know PCA2’s IPv6 address','The switch needs a route to PCA2','IPv6 sends every ping twice'],'PCA1 doesn’t know PCA2’s MAC address yet')},
-      {text:'The first event is ICMPv6. What Message Type does it list (the number)?',check:v=>/^\s*128\b/.test(v)||/echo request/i.test(v),answer:'128 (Echo Request)'},
-      {text:'In the first NDP event at PCA1, what is the destination IPv6 address now?',check:ipQ(ND.solicited(B.ip)),answer:ND.solicited(B.ip).toUpperCase()+' (PCA2’s solicited-node multicast group)',how:'the Out Layers of that event'},
-      {text:'…and what Layer 2 destination address does it use?',check:macQ(ND.mcastMac(B.ip)),answer:ND.mcastMac(B.ip)+' (a multicast MAC: 3333 + the group’s last 32 bits)'},
-      {text:'At SwitchA, is there any difference between the In and Out Layer 2 addresses?',...pick(['No, the switch forwards the frame unchanged','Yes, the switch puts in its own MAC','Yes, it changes the destination to broadcast'],'No, the switch forwards the frame unchanged')},
-      {text:'PCA2’s Neighbor Advertisement: Ethernet II DEST ADDR?',check:macQ(A.mac),answer:A.mac+' (PCA1)'},
-      {text:'PCA2’s Neighbor Advertisement: Ethernet II SRC ADDR?',check:macQ(B.mac),answer:B.mac+' (PCA2)'},
-      {text:'PCA2’s Neighbor Advertisement: IPv6 SRC IP?',check:ipQ(B.ip),answer:B.ip.toUpperCase()},
-      {text:'PCA2’s Neighbor Advertisement: IPv6 DST IP?',check:ipQ(A.ip),answer:A.ip.toUpperCase()},
-      {text:'Why are there no Out Layers for the NDP event at RTA?',...pick(['RTA isn’t the address being looked up, so it drops the solicitation','RTA is shut down','RTA forwards it to the other LAN','SwitchA blocks it'],'RTA isn’t the address being looked up, so it drops the solicitation')},
-      {text:'Does PCA1 then have everything it needs to send to PCA2?',...pick(['Yes: PCA2’s MAC address','No: it still needs PCA2’s IPv6 address','No: it needs the router’s MAC'],'Yes: PCA2’s MAC address')},
-      {text:'What is the ICMPv6 Echo Reply message type (the number)?',check:v=>/^\s*129\b/.test(v)||/echo reply/i.test(v),answer:'129 (Echo Reply)'},
-      {text:'You ping PCA2 again. Why are there no NDP events this time?',...pick(['PCA1 already has PCA2’s MAC in its neighbor cache','Neighbor Discovery only runs once a day','The switch answered for PCA2','Simulation mode hides them'],'PCA1 already has PCA2’s MAC in its neighbor cache')},
-      {part:'Part 2: a host on another LAN (clear RTA’s neighbors, reset, then ping -n 1 2001:db8:acad:2::a from PCA1)'},
-      {text:'When RTA’s Neighbor Advertisement reaches PCA1, what address is its source IP?',check:ipQ('fe80::1'),answer:'FE80::1 (RTA’s link-local address, PCA1’s default gateway)'},
-      {text:'PCA1’s echo request to PCB1: what destination MAC address does it use?',check:macQ(g0),answer:g0+' (RTA’s G0/0/0)'},
-      {text:'PCB1’s first outbound ICMPv6 (its echo reply): what’s missing in its Layer 2 information?',...pick(['The destination MAC address','The source MAC address','The destination IPv6 address','The source IPv6 address'],'The destination MAC address')},
-      {text:'You ping PCB1 again. Were there any NDP events?',...pick(['No','Yes'],'No')},
-      {text:'In the new list, PCB1’s echo reply has a destination MAC. What does it belong to?',...pick(['RTA’s G0/0/1 interface','PCA1','SwitchB','PCA2'],'RTA’s G0/0/1 interface'),how:g1},
-      {text:'Why does PCB1 use the router’s MAC address for its reply?',...pick(['PCA1 is on another network, so the frame goes to the default gateway','The router pretends to be PCA1','PCB1 doesn’t know PCA1’s IPv6 address','Every frame goes to the router'],'PCA1 is on another network, so the frame goes to the default gateway')},
-      {text:'On RTA, show ipv6 neighbors: how many addresses are listed?',check:numQ(()=>x.RTA.nd6.length),get answer(){return String(x.RTA.nd6.length);},how:'show ipv6 neighbors on RTA'},
-      {text:'Ping PCA2 from RTA (ping 2001:db8:acad:1::b). Is there an entry for PCA2 now?',check:v=>v==='Yes'&&x.RTA.nd6.some(e=>ND.same(e.ip,B.ip)),options:['Yes','No'],answer:'Yes (after RTA pings it)',how:'ping 2001:db8:acad:1::b on RTA, then show ipv6 neighbors'},
+      {part:`Part 1: a host on the same LAN. In Simulation mode, from PCA1: <code>ping -n 1 ${B.ip}</code>`},
+      {text:'Why are NDP events in the list at all?',...pick(['PCA1 doesn’t know PCA2’s MAC address yet','PCA1 doesn’t know PCA2’s IPv6 address','The switch needs a route to PCA2','IPv6 sends every ping twice'],'PCA1 doesn’t know PCA2’s MAC address yet'),
+        look:'Open event 1. Which Layer 2 addresses does PCA1’s echo request have?',why:'To put a frame on Ethernet, PCA1 needs the destination’s <b>MAC</b> address. It typed PCA2’s IPv6 address, so that part is known. NDP is IPv6’s way of asking “who has this address?” (it replaces IPv4’s ARP).'},
+      {text:'The first event is ICMPv6. What message type number does it show?',check:v=>/^\s*128\b/.test(v)||/echo request/i.test(v),answer:'128 (Echo Request)',
+        look:'Event 1, Out Layers, the ICMPv6 line.',why:'A ping is an ICMPv6 <b>Echo Request</b>; the reply is an Echo Reply. Their type numbers are next to each other.'},
+      {text:'In PCA1’s first NDP event, what is the destination IPv6 address?',check:ipQ(ND.solicited(B.ip)),answer:U(ND.solicited(B.ip))+' (PCA2’s solicited-node multicast group)',
+        look:'The first NDP event at PCA1, Out Layers, Layer 3 Dest.',why:'PCA1 can’t send to PCA2 directly yet, so it sends to a multicast group that only hosts whose address ends the same way join: <code>FF02::1:FF</code> + the last 6 hex digits of the target address.'},
+      {text:'…and what Layer 2 destination address does that frame use?',check:macQ(ND.mcastMac(B.ip)),answer:ND.mcastMac(B.ip)+' (a multicast MAC: 3333 + the group’s last 32 bits)',
+        look:'Same event, Layer 2 Dest.',why:'IPv6 multicast maps to a MAC that starts with <code>3333</code> followed by the last 32 bits of the multicast address. Compare it with the destination IPv6 address you just found.'},
+      {text:'At SwitchA, do the In and Out Layer 2 addresses differ?',...pick(['No, the switch forwards the frame unchanged','Yes, the switch puts in its own MAC','Yes, it changes the destination to broadcast'],'No, the switch forwards the frame unchanged'),
+        look:'The NDP event at SwitchA: compare In Layers with Out Layers.',why:'A switch is a Layer 2 device: it chooses which ports to send a frame out of, but doesn’t rewrite the frame.'},
+      {text:'PCA2’s Neighbor Advertisement: what is the Ethernet destination MAC?',check:macQ(A.mac),answer:A.mac+' (PCA1)',
+        look:'The NDP event at PCA2: its Out Layers are the advertisement it sends back.',why:'The solicitation carried PCA1’s MAC, so PCA2 can answer PCA1 directly (unicast) instead of multicasting.'},
+      {text:'…the Ethernet source MAC?',check:macQ(B.mac),answer:B.mac+' (PCA2)',look:'Same event, Layer 2 Src.',why:'This is the whole point of the exchange: the advertisement’s source MAC is the answer PCA1 was asking for.'},
+      {text:'…the IPv6 source address?',check:ipQ(B.ip),answer:U(B.ip),look:'Same event, Layer 3 Src.',why:'PCA2 answers from the address PCA1 asked about.'},
+      {text:'…the IPv6 destination address?',check:ipQ(A.ip),answer:U(A.ip),look:'Same event, Layer 3 Dest.',why:'It goes back to whoever sent the solicitation.'},
+      {text:'Why does RTA’s NDP event have no Out Layers?',...pick(['RTA isn’t the address being looked up, so it drops the solicitation','RTA is shut down','RTA forwards it to the other LAN','SwitchA blocks it'],'RTA isn’t the address being looked up, so it drops the solicitation'),
+        look:'Find the NDP event where At Device is RTA and open it.',why:'Every device on the LAN receives the flooded frame, but only the owner of the target address answers. Routers also never forward link-local multicast to another network.'},
+      {text:'After the advertisement, does PCA1 have everything it needs to send to PCA2?',...pick(['Yes: PCA2’s MAC address','No: it still needs PCA2’s IPv6 address','No: it needs the router’s MAC'],'Yes: PCA2’s MAC address'),
+        look:'The next ICMPv6 event at PCA1: are both Layer 2 addresses filled in now?',why:'It already had both IPv6 addresses; NDP supplied the missing destination MAC. PCA2 is on the same LAN, so the router isn’t involved.'},
+      {text:'What is the ICMPv6 Echo Reply message type number?',check:v=>/^\s*129\b/.test(v)||/echo reply/i.test(v),answer:'129 (Echo Reply)',look:'An ICMPv6 event at PCA2, Out Layers.',why:'It’s one more than the Echo Request.'},
+      {text:'Reset the simulation and ping PCA2 again. Why are there no NDP events this time?',...pick(['PCA1 already has PCA2’s MAC in its neighbor cache','Neighbor Discovery only runs once a day','The switch answered for PCA2','Simulation mode hides them'],'PCA1 already has PCA2’s MAC in its neighbor cache'),
+        look:'Click Reset Simulation, ping again, and count the NDP events.',why:'Devices remember what NDP taught them (the neighbor cache), just like an ARP cache in IPv4.'},
+      {part:`Part 2: a host on another LAN. On RTA: <code>clear ipv6 neighbors</code>. Reset the simulation, then from PCA1: <code>ping -n 1 ${C.ip}</code>`},
+      {text:'When RTA’s Neighbor Advertisement reaches PCA1, what is its source IPv6 address?',check:ipQ('fe80::1'),answer:'FE80::1 (RTA’s link-local address, PCA1’s default gateway)',
+        look:'The NDP event at PCA1 after RTA answers, In Layers, Layer 3 Src. Compare it with PCA1’s default gateway in the Addressing Table.',why:'PCB1 is on another network, so PCA1 isn’t looking for PCB1’s MAC. It looks for its <b>default gateway</b>, which is a link-local address.'},
+      {text:'PCA1’s echo request to PCB1: what destination MAC address does it use?',check:macQ(g0),answer:g0+' (RTA’s G0/0/0)',
+        look:'The ICMPv6 event at PCA1 that has both Layer 2 addresses.',why:'The IPv6 destination stays PCB1 all the way, but each Ethernet frame only goes one hop. The first hop is the router’s interface on PCA1’s LAN.'},
+      {text:'PCB1’s first outbound ICMPv6 (its echo reply): what’s missing from its Layer 2 information?',...pick(['The destination MAC address','The source MAC address','The destination IPv6 address','The source IPv6 address'],'The destination MAC address'),
+        look:'The ICMPv6 event at PCB1, Out Layers.',why:'PCB1 learned RTA’s address from the solicitation’s IPv6 source, but its reply goes to its <b>gateway</b> (FE80::1), and it doesn’t have that MAC yet. So it runs NDP too.'},
+      {text:'Reset and ping PCB1 again. Are there any NDP events?',...pick(['No','Yes'],'No'),look:'Reset Simulation, ping again, look at the Type column.',why:'Every device on the path now has what it needs in its neighbor cache.'},
+      {text:'In that second run, whose MAC is the destination of PCB1’s echo reply?',...pick(['RTA’s G0/0/1 interface','PCA1','SwitchB','PCA2'],'RTA’s G0/0/1 interface'),
+        look:`Open PCB1’s ICMPv6 event and compare the Layer 2 Dest with the routers’ MACs (on RTA: show interfaces).`,why:'Same rule as before, in the other direction: off-network traffic goes to the gateway’s MAC.'},
+      {text:'Why does PCB1 use the router’s MAC for its reply?',...pick(['PCA1 is on another network, so the frame goes to the default gateway','The router pretends to be PCA1','PCB1 doesn’t know PCA1’s IPv6 address','Every frame goes to the router'],'PCA1 is on another network, so the frame goes to the default gateway'),
+        look:'Compare the first 64 bits (the prefix) of PCB1’s and PCA1’s addresses.',why:'Different prefix means different network. Hosts only send straight to MACs on their own link; everything else goes through the gateway.'},
+      {text:'On RTA, run show ipv6 neighbors. How many addresses are listed?',check:numQ(()=>x.RTA.nd6.length),get answer(){return String(x.RTA.nd6.length);},
+        look:'RTA’s tab: <code>enable</code>, then <code>show ipv6 neighbors</code>. Count the rows.',why:'A router learns a neighbor when it solicits it or gets solicited by it. Think about which hosts RTA actually exchanged NDP with.'},
+      {text:'Now ping PCA2 from RTA. Is there an entry for PCA2 in the table?',check:v=>v==='Yes'&&x.RTA.nd6.some(e=>ND.same(e.ip,B.ip)),options:['Yes','No'],answer:'Yes (after RTA pings it)',
+        look:`On RTA: <code>ping ${B.ip}</code>, then <code>show ipv6 neighbors</code> again.`,why:'Before the ping, PCA2 had never talked to RTA. The ping made RTA run NDP for PCA2.'},
       {part:'Reflection'},
-      {text:'When does a device need IPv6 Neighbor Discovery?',...pick(['When it needs the MAC address for an IPv6 address on its own link','Every time it sends any packet','Only when it talks to the internet','Only when it boots'],'When it needs the MAC address for an IPv6 address on its own link')},
-      {text:'How does a router keep Neighbor Discovery traffic down?',...pick(['It doesn’t forward the link-local multicasts, so ND stays on each LAN','It answers for every host','It caches every MAC in the network','It turns ND off on its interfaces'],'It doesn’t forward the link-local multicasts, so ND stays on each LAN')},
-      {text:'How does IPv6 keep ND from bothering every host?',...pick(['Solicited-node multicast: only hosts whose address ends the same way listen','It broadcasts to everyone, but quietly','It asks the switch first','It uses ARP instead'],'Solicited-node multicast: only hosts whose address ends the same way listen')},
-      {text:'How is ND different for a host on another LAN?',...pick(['The host finds the gateway’s MAC, and the router does ND on the far LAN','The host finds the far host’s MAC directly','Nothing changes','The router skips ND'],'The host finds the gateway’s MAC, and the router does ND on the far LAN')},
+      {text:'When does a device need IPv6 Neighbor Discovery?',...pick(['When it needs the MAC address for an IPv6 address on its own link','Every time it sends any packet','Only when it talks to the internet','Only when it boots'],'When it needs the MAC address for an IPv6 address on its own link'),
+        look:'Think back to the second pings, which had no NDP.',why:'NDP only runs when the cache doesn’t already have the next hop’s MAC, and only for addresses on the same link.'},
+      {text:'How does a router keep Neighbor Discovery traffic down?',...pick(['It doesn’t forward the link-local multicasts, so ND stays on each LAN','It answers for every host','It caches every MAC in the network','It turns ND off on its interfaces'],'It doesn’t forward the link-local multicasts, so ND stays on each LAN'),
+        look:'Did PCA1’s solicitation ever show up on SwitchB’s LAN?',why:'FF02:: addresses are link-local scope: a router never forwards them.'},
+      {text:'How does IPv6 keep ND from bothering every host?',...pick(['Solicited-node multicast: only hosts whose address ends the same way listen','It broadcasts to everyone, but quietly','It asks the switch first','It uses ARP instead'],'Solicited-node multicast: only hosts whose address ends the same way listen'),
+        look:'Look again at the destination address of a Neighbor Solicitation.',why:'IPv6 has no broadcast. The solicited-node group is built from the last 24 bits of the target address, so almost no other host is listening.'},
+      {text:'How is ND different when the destination is on another LAN?',...pick(['The host finds the gateway’s MAC, and the router does ND on the far LAN','The host finds the far host’s MAC directly','Nothing changes','The router skips ND'],'The host finds the gateway’s MAC, and the router does ND on the far LAN'),
+        look:'Compare Part 1’s event list with Part 2’s.',why:'Each hop resolves only its own next hop: PCA1 finds RTA, RTA finds PCB1, and PCB1 finds RTA for the reply.'},
     ];
   }
   const topo=`<svg class="topo" viewBox="0 0 640 150" role="img" aria-label="Topology: PCA1 and PCA2 on SwitchA, to RTA G0/0/0; RTA G0/0/1 to SwitchB and PCB1">
@@ -334,7 +405,7 @@ const NDLab=(()=>{
     box.append(el('div',{class:'row nd-ctl'},el('div',{class:'groups',role:'group','aria-label':'Mode'},...['Realtime','Simulation'].map(m=>el('button',{class:'chip'+((m==='Simulation')===sim?' on':''),type:'button',text:m,'aria-pressed':String((m==='Simulation')===sim),onclick:()=>{sim=m==='Simulation';x.M.sim=sim;renderSim();}}))),
       el('button',{class:'btn small',type:'button',text:'↺ Reset Simulation',onclick:()=>{x.M.reset();sel=-1;renderSim();}}),el('span',{class:'dim',text:'Filters: ICMPv6, NDP'})));
     if(!sim){box.append(el('p',{class:'dim',text:'Realtime mode: pings happen instantly and nothing is recorded. Switch to Simulation to capture events.'}));return;}
-    if(!E.length){box.append(el('p',{class:'dim',text:'No events yet. From PCA1’s command prompt, ping an address (for example ping -n 1 2001:db8:acad:1::b).'}));return;}
+    if(!E.length){box.append(el('p',{class:'dim',text:'No events yet. From PCA1’s command prompt, ping an address from the Addressing Table with ping -n 1.'}));return;}
     const tb=el('table',{class:'given nd-ev'},el('tr',null,...['#','Last Device','At Device','Type'].map(h=>el('th',{text:h}))),...E.map((e,i)=>el('tr',{class:(i===sel?'on ':'')+(e.type==='NDP'?'ndp':'icmp'),tabindex:'0',onclick:()=>{sel=i;renderSim();},onkeydown:ev=>{if(ev.key==='Enter'){sel=i;renderSim();}}},
       el('td',{text:String(e.n)}),el('td',{text:e.last}),el('td',{text:e.at}),el('td',null,el('span',{class:'nd-type',text:e.type})))));
     box.append(el('div',{class:'tablewrap nd-list'},tb),sel>=0&&E[sel]?pduBox(E[sel]):el('p',{class:'dim',text:'Click an event to see its PDU.'}));
@@ -343,39 +414,33 @@ const NDLab=(()=>{
     root=r;if(!x){x=ND.build();x.M.sim=sim;}
     const QS=questions();let qi=0;
     const list=el('ol',{class:'tquestions nd-q'});
-    QS.forEach(q=>{if(q.part){list.append(el('li',{class:'nd-part',text:q.part}));return;}const i=qi++;
-      const fb=el('div',{class:'tq-fb'});let val='';const inp=q.options?null:el('input',{type:'text','aria-label':q.text,autocomplete:'off',spellcheck:'false',autocapitalize:'off',placeholder:'your answer'});
-      const ask=()=>{const v=inp?inp.value:val;if(!String(v).trim()){fb.textContent='Answer first.';fb.className='tq-fb coach';return;}
-        let ok=false;try{ok=!!q.check(v);}catch(e){}
-        if(ok){qok.add(i);li.classList.add('ok');fb.textContent='✓ Right';fb.className='tq-fb good';done();}else{fb.textContent=q.how?`Not quite. Look at ${q.how}.`:'Not quite. Check the event list and the PDU details.';fb.className='tq-fb bad';}};
-      if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();ask();}});
-      const picks=q.options?el('div',{class:'groups lab-picks'},...q.options.map(o=>el('button',{class:'chip',type:'button',text:o,onclick:e=>{val=o;$$('button',picks).forEach(b=>b.classList.toggle('on',b===e.target));}}))):null;
-      const reveal=el('button',{class:'btn small ghost',type:'button',text:'Show',onclick:()=>{fb.textContent=`Answer: ${q.answer}`;fb.className='tq-fb coach';}});
-      const li=el('li',{class:qok.has(i)?'ok':'',value:String(i+1)},el('span',{class:'tq-t',text:q.text}),el('div',{class:'row'},inp,picks,el('button',{class:'btn small',type:'button',text:'Check',onclick:ask}),reveal),fb);list.append(li);});
+    QS.forEach(q=>{if(q.part){list.append(el('li',{class:'nd-part',html:q.part}));return;}list.append(TeachQ(q,qi++,qst,done));});
     const total=qi;
-    function done(){const b=$('#ndBanner');if(!b)return;b.textContent='';if(qok.size===total){b.append(el('div',{class:'done-banner'},el('b',{text:'Lab complete ✓ '}),el('span',{text:'Every question answered.'})));if(!counted){counted=true;S.labs=(S.labs||0)+1;store.set('ns_labs',S.labs);}}else b.append(el('div',{class:'dim',text:`${qok.size} of ${total} answered`}));}
+    function done(){const b=$('#ndBanner');if(!b)return;b.textContent='';const own=[...qst.ok].filter(i=>!qst.helped.has(i)).length;
+      if(qst.ok.size===total){b.append(el('div',{class:'done-banner'},el('b',{text:'Lab complete ✓ '}),el('span',{text:`${own} of ${total} on your own.`}),own<total?el('div',{class:'dim',text:'Start over runs the lab on new addresses: try the ones you needed help with again.'}):null));if(!counted){counted=true;S.labs=(S.labs||0)+1;store.set('ns_labs',S.labs);}}
+      else b.append(el('div',{class:'dim',text:`${qst.ok.size} of ${total} answered · ${own} on your own`}));}
     const tabs=el('div',{class:'dtabs',role:'tablist','aria-label':'Devices'}),panes=el('div');
     ['PCA1','RTA','PCB1'].forEach(n=>{const d=x.net.devices[n];const t=terms[n]||(terms[n]=Terminal(d,x.net,()=>renderSim()));
-      if(!t.started){t.print([{t:n==='RTA'?'RTA — Cisco ISR 4321 router console. Try show ipv6 neighbors, clear ipv6 neighbors, ping. Press Enter to start.':`${n} — Desktop › Command Prompt. Try ipconfig, or ping -n 1 2001:db8:acad:1::b`,c:'sys'}]);t.started=true;}
+      if(!t.started){t.print([{t:n==='RTA'?'RTA — Cisco ISR 4321 router console. Try show ipv6 neighbors, clear ipv6 neighbors, ping. Press Enter to start.':`${n} — Desktop › Command Prompt. Try ipconfig, or ping -n 1 followed by an address from the Addressing Table.`,c:'sys'}]);t.started=true;}
       t.root.hidden=n!==cur;panes.append(t.root);
       tabs.append(el('button',{type:'button',role:'tab','aria-selected':String(n===cur),class:n===cur?'on':'','data-dev':n,onclick:()=>{cur=n;$$('button',tabs).forEach(b=>{b.classList.toggle('on',b.dataset.dev===n);b.setAttribute('aria-selected',String(b.dataset.dev===n));});Object.entries(terms).forEach(([k,p])=>{p.root.hidden=k!==n;});terms[n].focus();}},devIco(d),n));});
     const addr=el('table',{class:'given'},el('tr',null,...['Device','Interface','IPv6 Address / Prefix','Default Gateway'].map(h=>el('th',{text:h}))),
-      ...[['RTA','G0/0/0','2001:db8:acad:1::1/64','N/A'],['RTA','G0/0/1','2001:db8:acad:2::1/64','N/A'],['PCA1','NIC','2001:db8:acad:1::a/64','fe80::1'],['PCA2','NIC','2001:db8:acad:1::b/64','fe80::1'],['PCB1','NIC','2001:db8:acad:2::a/64','fe80::1']].map(row=>el('tr',null,...row.map((c,i)=>el('td',{class:i>=2?'v':'',text:c})))));
-    r.append(el('div',{class:'dmeta'},el('span',{text:'PACKET TRACER LAB · 9.3.4 IPV6 NEIGHBOR DISCOVERY'}),el('button',{class:'btn small ghost',type:'button',text:'↺ Start over',onclick:()=>{x=null;terms={};qok=new Set();sel=-1;cur='PCA1';counted=false;Lab.start({kind:'nd'});}})),
+      ...[['RTA','G0/0/0',x.A+'1/64','N/A'],['RTA','G0/0/1',x.B+'1/64','N/A'],['PCA1','NIC',x.PCA1.v6.ip+'/64','fe80::1'],['PCA2','NIC',x.PCA2.v6.ip+'/64','fe80::1'],['PCB1','NIC',x.PCB1.v6.ip+'/64','fe80::1']].map(row=>el('tr',null,...row.map((c,i)=>el('td',{class:i>=2?'v':'',text:c})))));
+    r.append(el('div',{class:'dmeta'},el('span',{text:'PACKET TRACER LAB · 9.3.4 IPV6 NEIGHBOR DISCOVERY'}),el('button',{class:'btn small ghost',type:'button',text:'↺ Start over',onclick:()=>{x=null;terms={};qst=fresh();sel=-1;cur='PCA1';counted=false;Lab.start({kind:'nd'});}})),
       el('div',{class:'lab-prompt',html:`Watch how IPv6 finds a MAC address. In <b>Simulation</b> mode, every frame a ping causes shows up in the event list: click one to see its addresses. Neighbor Discovery (NDP) replaces IPv4’s ARP.${topo}`}),
       el('details',{class:'ttable',open:!matchMedia('(max-width:900px)').matches},el('summary',{class:'dim mono',style:'cursor:pointer;font-size:12px',text:'ADDRESSING TABLE'}),el('div',{class:'tablewrap'},addr)),
       el('div',{class:'lab-grid nd-grid'},el('div',{class:'lab-q'},tabs,panes),el('div',{class:'lab-q',id:'ndSim'})),
       el('h3',{text:'Questions'}),list,el('div',{id:'ndBanner'}));
     renderSim();done();
   }
-  return {render,get x(){return x;},get sim(){return sim;},reset(){x=null;terms={};qok=new Set();sel=-1;}};
+  return {render,get x(){return x;},get sim(){return sim;},reset(){x=null;terms={};qst=fresh();sel=-1;}};
 })();
 
 /* ---------------- Packet Tracer lab: Part 1 (subnetting + Addressing Table) here, Part 2 = the scenario task ---------------- */
 const Lab=(()=>{
   // two labs: 11.7.5 Subnetting Scenario (kind 'lab') and 11.9.3 VLSM Design (kind 'vlsm'), each with its own parts
   const KINDS={lab:{name:'11.7.5 Subnetting Scenario',parts:LAB.LABPARTS,task:'scenario',cfg:'Part 2'},vlsm:{name:'11.9.3 VLSM Design',parts:LAB.VLSMPARTS,task:'vlsm-scenario',cfg:'Part 3'},sub:{name:'11.5.5 Subnet an IPv4 Network',parts:LAB.SUBPARTS,task:'subnet-ipv4',cfg:'Part 2'},nd:{name:'9.3.4 IPv6 Neighbor Discovery',parts:{all:'All'},special:true}};
-  let q=null,pr=null,k=0,miss=[],first=0,justDone=-1,done=false,msg='',msgCls='',hintN=0,keep=null;
+  let q=null,pr=null,k=0,miss=[],first=0,justDone=-1,done=false,msg='',msgCls='',hintN=0,keep=null,tries=[],shown=[];
   let kind=store.get('ns_labkind','lab');if(!KINDS[kind])kind='lab';
   const parts=Object.assign({lab:store.get('ns_labpart','all'),vlsm:'all',sub:'all'},store.get('ns_labparts',{}));let part;
   const setKind=kd=>{kind=kd;part=parts[kind];if(!KINDS[kind].parts[part])part='all';};setKind(kind);
@@ -383,7 +448,7 @@ const Lab=(()=>{
   const asParams=L=>kind==='vlsm'?{vlsm:ipStr(L.base),hosts:L.hosts.join(',')}:kind==='sub'?{subnet:ipStr(L.base),hosts:`${L.a},${L.b}`,spare:L.spare}:{lab:ipStr(L.base),hosts:L.hosts,r1:L.r1,r2:L.r2};
   const fixedOf=L=>kind==='vlsm'?{kind:'vlsm',base:ipStr(L.base),hosts:L.hosts.slice()}:kind==='sub'?{kind:'sub',base:ipStr(L.base),a:L.a,b:L.b,spare:L.spare}:{kind:'lab',base:ipStr(L.base),hosts:L.hosts,r1:L.r1,r2:L.r2};
   function setURL(){try{const u=new URL(location.href);u.search='';u.searchParams.set('tab','lab');if(pr)Object.entries(asParams(q.L)).forEach(([a,b])=>u.searchParams.set(a,b));history.replaceState(null,'',u.toString());}catch(e){}}
-  function load(fixed){if(kind==='nd'&&!(fixed&&fixed.kind&&fixed.kind!=='nd')){render();return;}if(fixed&&fixed.kind&&KINDS[fixed.kind]&&fixed.kind!==kind){setKind(fixed.kind);store.set('ns_labkind',kind);}if(fixed&&!fixed.base)fixed=null;pr=fixed||null;q=kind==='vlsm'?LAB.genVlsmLab(fixed||null,part):kind==='sub'?LAB.genSubLab(fixed||null,part):LAB.genLab(fixed||null,part);k=0;miss=q.fields.map(()=>false);first=0;justDone=-1;done=false;msg='';hintN=0;setURL();render();}
+  function load(fixed){if(kind==='nd'&&!(fixed&&fixed.kind&&fixed.kind!=='nd')){render();return;}if(fixed&&fixed.kind&&KINDS[fixed.kind]&&fixed.kind!==kind){setKind(fixed.kind);store.set('ns_labkind',kind);}if(fixed&&!fixed.base)fixed=null;pr=fixed||null;q=kind==='vlsm'?LAB.genVlsmLab(fixed||null,part):kind==='sub'?LAB.genSubLab(fixed||null,part):LAB.genLab(fixed||null,part);k=0;miss=q.fields.map(()=>false);tries=q.fields.map(()=>0);shown=q.fields.map(()=>false);first=0;justDone=-1;done=false;msg='';hintN=0;setURL();render();}
   function start(fixed){if(fixed&&fixed.kind==='nd'){setKind('nd');store.set('ns_labkind','nd');render();return;}if(kind==='nd'&&!(fixed&&fixed.kind)){render();return;}if(fixed||!q)load(fixed);else render();}
   const ipCell=v=>`<span class="ipf">${ipStr(v)}</span><span class="ips">.${oct(v,3)}</span>`;
   // the tables fill in as you answer (same layout as the lab handout)
@@ -414,9 +479,9 @@ const Lab=(()=>{
     if(done)return;const f=q.fields[k],inp=$('#labIn'),raw=LAB.expand(f,inp.value);
     if(LAB.isBlank(raw)){msg='Type an answer first.';msgCls='coach';renderQ();return;}
     if(LAB.isRight(f,raw)){if(!miss[k])first++;justDone=k;k++;msg='';hintN=0;if(k>=q.fields.length){done=true;const L=q.L;S.labs=(S.labs||0)+1;store.set('ns_labs',S.labs);}render();return;}
-    miss[k]=true;keep={k,v:inp.value};let d=null;try{d=q.diag(q.fields.map((g,j)=>j===k?raw:j<k?LAB.show(g):''))[k];}catch(e){}
+    miss[k]=true;tries[k]++;if(!hintN&&(LAB.hintsFor(q)[k]||[]).length)hintN=1;keep={k,v:inp.value};let d=null;try{d=q.diag(q.fields.map((g,j)=>j===k?raw:j<k?LAB.show(g):''))[k];}catch(e){}
     // a nudge, not the answer: the worked value stays hidden until “Show the answer”
-    msg=(d?String(d):'That’s not it.').replace(/<b class="g mono">[^<]*<\/b>/g,'<b class="g mono">?</b>')+' <span class="dim">Try again, or use Hint.</span>';msgCls='bad';renderQ();
+    msg=(d?String(d):'That’s not it.').replace(/<b class="g mono">[^<]*<\/b>/g,'<b class="g mono">?</b>')+` <span class="dim">${tries[k]>=2?'Work through the hints; the answer is unlocked if you’re still stuck.':'A hint is open below. Try again.'}</span>`;msgCls='bad';renderQ();
   }
   function own(){
     const box=$('#labOwn');if(!box.hidden){box.hidden=true;return;}box.hidden=false;box.textContent='';
@@ -451,7 +516,8 @@ const Lab=(()=>{
   function renderQ(){
     const box=$('#labQ');if(!box)return;box.textContent='';
     if(done){const n=q.fields.length;
-      box.append(el('div',{class:'done-banner'},el('b',{text:`${part==='all'?(kind==='vlsm'?'Parts 1–2':'Part 1'):KINDS[kind].parts[part]} done ✓`}),el('span',{text:` ${first} of ${n} right on the first try.`})),
+      box.append(el('div',{class:'done-banner'},el('b',{text:`${part==='all'?(kind==='vlsm'?'Parts 1–2':'Part 1'):KINDS[kind].parts[part]} done ✓`}),el('span',{text:` ${first} of ${n} right on the first try.`}),
+        (()=>{const W=[...new Set(q.fields.filter((f,j)=>shown[j]).map(f=>f.label))];return W.length?el('div',{class:'dim',text:`You needed the answer for: ${W.slice(0,6).join(' · ')}${W.length>6?' …':''}. New lab gives you a different network to try those again.`}):null;})()),
         el('div',{class:'lab-sol',html:q.explain}),
         el('div',{class:'dacts'},el('button',{class:'btn primary',type:'button',text:`${KINDS[kind].cfg}: configure the devices →`,onclick:toPart2}),el('button',{class:'btn',type:'button',text:'New lab',onclick:()=>load(null)}),pr?el('button',{class:'btn ghost',type:'button',text:'Same network again',onclick:()=>load(pr)}):null));return;}
     const f=q.fields[k],n=q.fields.length;
@@ -475,7 +541,7 @@ const Lab=(()=>{
         hintN?el('ol',{class:'lab-hints'},...hs.slice(0,hintN).map(s=>el('li',{html:s.q+(s.tip?` <span class="dim">${s.tip}</span>`:'')}))):null),
       el('div',{class:'dacts'},el('button',{class:'btn primary',type:'button',text:'Check',onclick:check}),
         hintN<hs.length?el('button',{class:'btn',type:'button',text:hintN?'Next hint':'Hint',onclick:()=>{hintN++;miss[k]=true;renderQ();}}):null,
-        miss[k]?el('button',{class:'btn ghost',type:'button',text:'Show the answer',onclick:()=>{const v=LAB.show(f);inp.value=f.pre&&v.startsWith(f.pre)?v.slice(f.pre.length):v;if(inp.sync)inp.sync();else inp.focus();}}):null));
+        !shown[k]&&(tries[k]>=2||(hintN>=hs.length&&tries[k]>=1))?el('button',{class:'btn ghost',type:'button',text:'Show the answer',onclick:()=>{shown[k]=true;hintN=hs.length;msg=`Answer: <b class="g mono">${escH(LAB.show(f))}</b> <span class="dim">The steps above show how to get it. Type it in to go on; it won’t count as first try.</span>`;msgCls='coach';renderQ();}}):null));
     const sh=$('#labSheet');if(sh)sh.innerHTML=sheet();
     if(isDesktop()&&!picks)inp.focus();
   }
@@ -511,7 +577,7 @@ function labParams(sp){
 renderStats();
 (()=>{let sp;try{sp=new URLSearchParams(location.search);}catch(e){sp=new URLSearchParams('');}
   const task=sp.get('task'),tab=sp.get('tab');
-  if(task&&CS.TASKS.some(x=>x.id===task))go('tasks',{id:task,params:task==='scenario'?labParams(sp):task==='vlsm-scenario'?vlsmParams(sp):task==='subnet-ipv4'?subParams(sp):undefined});
+  if(task&&CS.TASKS.some(x=>x.id===task))go('tasks',{id:task,params:task==='scenario'?labParams(sp):task==='vlsm-scenario'?vlsmParams(sp):task==='subnet-ipv4'?subParams(sp):task==='connect-router'&&sp.has('a')?{a:sp.get('a'),b:sp.get('b'),c:sp.get('c'),w:sp.get('w')}:undefined});
   else if(sp.has('subnet')&&!task){const p=subParams(sp);go('lab',{lab:p?{kind:'sub',base:p.subnet,a:Number(p.hosts.split(',')[0]),b:Number(p.hosts.split(',')[1]),spare:p.spare}:{kind:'sub'}});}
   else if(sp.has('vlsm')&&!task){const p=vlsmParams(sp);go('lab',{lab:p?{kind:'vlsm',base:p.vlsm,hosts:p.hosts.split(',').map(Number)}:{kind:'vlsm'}});}
   else if(sp.get('lab')==='nd'&&!task){go('lab',{lab:{kind:'nd'}});}

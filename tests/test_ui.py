@@ -67,6 +67,8 @@ with sync_playwright() as pw:
     pg.fill('#din', 'hostnme X'); pg.press('#din', 'Enter')
     ok('a wrong command shows the IOS error', 'Invalid input' in pg.text_content('#dfb'))
     ok('a miss resets the streak and counts in accuracy', pg.text_content('#sAcc') == '0%' and pg.text_content('#sStreak') == '0')
+    pg.click('.dacts button:has-text("Hint")')
+    ok('the drill hint shows the command’s shape, not the values', '<' in (pg.text_content('#dfb .ans') or '') or pg.text_content('.dacts button:nth-child(2)') == 'Show answer')
     pg.click('button:has-text("Show answer")'); ans = pg.text_content('#dfb .ans')
     ok('Show answer shows the command', len(ans) > 3)
     pg.fill('#din', ans); pg.press('#din', 'Enter'); ok('typing the shown answer is accepted', '✓ Correct' in pg.text_content('#dfb'))
@@ -101,14 +103,16 @@ with sync_playwright() as pw:
     # Show me, stars, next goal, help and coach notes in a task
     pg.evaluate("NS.go('tasks',{id:'basic-router'})"); pg.wait_for_timeout(50)
     ok('Next goal line names the first goal', pg.evaluate('NS.Tasks.t.goals[0].text') in pg.text_content('#nextgoal'))
-    pg.click('#showBtn'); ok('Show me lists the steps', pg.locator('#showme li').count() >= 1)
+    pg.click('#showBtn'); ok('help starts with what to do, in words', pg.locator('#showme .help-words li').count() >= 1 and 'hostname' not in pg.text_content('#showme').lower())
+    pg.click('#showme button:has-text("Show the syntax")'); ok('then the syntax, with the values left as placeholders', '<hostname>' in pg.text_content('#showme ol') and pg.evaluate('NS.Tasks.t.given.find(g=>g[0]==="Hostname")[1]') not in pg.text_content('#showme ol'))
+    pg.click('#showme button:has-text("Show the exact commands")'); ok('then the exact commands', pg.evaluate('NS.Tasks.t.given.find(g=>g[0]==="Hostname")[1]') in pg.text_content('#showme ol'))
     type_cmd(pg, 'conf t'); ok('a teaching note for conf t at R1>', 'enable' in pg.text_content('.tmain .tout:visible').lower())
     type_cmd(pg, 'en'); pg.fill(TERM, 'sh '); pg.press(TERM, '?')
     ok('? lists what can follow', 'running-config' in pg.text_content('.tmain .tout:visible'))
     ok('? keeps what was typed', pg.input_value(TERM).startswith('sh'))
     pg.fill(TERM, 'conf'); pg.press(TERM, 'Tab'); ok('Tab completes in the terminal', pg.input_value(TERM) == 'configure ')
     pg.fill(TERM, ''); pg.press(TERM, 'ArrowUp'); ok('↑ brings back the last command', pg.input_value(TERM) == 'en')
-    solve_task(pg); ok('using Show me costs a star', '★★☆' in pg.text_content('.stars'))
+    solve_task(pg); ok('using all three help levels on a goal costs a star', '★★☆' in pg.text_content('.stars') and 'exact command' in pg.text_content('.done-banner'))
 
     # ---------- scenario deep link (from Subnet Sprint) ----------
     def scen(q):

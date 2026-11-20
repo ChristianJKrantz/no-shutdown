@@ -187,7 +187,7 @@ const TASKS=[
  {id:'scenario',title:'Subnetting Scenario, Part 2',level:'Packet Tracer lab',skills:'configure R1’s LANs · switch VLAN 1 + gateway · PC settings · verify',
   build(p){return scenario(p);}},
  {id:'connect-router',title:'Connect a Router to a LAN',level:'Packet Tracer lab',skills:'show interfaces · show ip route · interfaces with descriptions · save · verify',
-  build(){return connectRouter();}},
+  build(p){return connectRouter(p);}},
  {id:'subnet-ipv4',title:'Subnet an IPv4 Network, Part 2',level:'Packet Tracer lab',skills:'router secret, console, hostname, LANs, save · two switches · two PCs · test',
   build(p){return subnetTask(p);}},
  {id:'vlsm-scenario',title:'VLSM Design, Part 3',level:'Packet Tracer lab',skills:'R1 LANs with different masks · switch VLAN 1 + gateway · PC settings · verify',
@@ -267,6 +267,53 @@ function navTo(d,where){
 }
 function showMe(goal,d){const nav=navTo(d,goal.where);if(nav===null)return goal.cmds.slice(1);return nav.concat(goal.cmds);}
 
+// Help in three levels for a goal: plain words, syntax with <placeholders>, and the exact commands (showMe).
+// The steps are replayed on a copy of the device so every one is named from the mode it's typed in.
+const HELPW={
+  'enable':'Go to privileged EXEC mode (the <code>#</code> prompt).','disable':'Drop back to user EXEC mode (the <code>&gt;</code> prompt).',
+  'conf t':'Enter global configuration mode.','exit':'Go back up one level.','end':'Go all the way back to privileged EXEC.',
+  'interface':a=>`Select the interface <code>${a}</code>.`,'line con':'Select the console line.','line vty':'Select the VTY lines (remote logins).',
+  'hostname':'Name the device.','no ip domain-lookup':'Stop the router from trying to look up mistyped commands as hostnames.',
+  'enable secret':'Set the encrypted password for privileged EXEC.','enable password':'Set the (unencrypted) privileged EXEC password.',
+  'line password':'Set this line’s password.','login':'Make the line ask for that password.','login local':'Make the line ask for a username and password from the local user list.',
+  'service password-encryption':'Encrypt the plain-text passwords in the configuration.','banner motd':'Set the message of the day banner, between two delimiter characters.',
+  'ip address':'Give the interface its IPv4 address and subnet mask.','no shutdown':'Turn the interface on.','shutdown':'Turn the interface off.','description':'Describe what the interface connects to.',
+  'ip default-gateway':'Set the switch’s default gateway (the router’s address on its LAN).','copy run start':'Save the running configuration to NVRAM.',
+  'copy run flash':'Copy the running configuration to a file in flash.','copy flash run':'Load a configuration file from flash into the running configuration.',
+  'ping':'Test reachability with <code>ping</code>.','ping6':'Test reachability with <code>ping</code>.','ip domain-name':'Set the domain name (needed for the RSA keys).',
+  'crypto key':'Generate RSA keys for SSH.','crypto key mod':'Generate RSA keys for SSH.','ip ssh version':'Use SSH version 2.','username secret':'Create a local user with an encrypted password.',
+  'username password':'Create a local user.','transport ssh':'Allow only SSH on these lines.','ssh':'Connect with SSH: <code>ssh -l</code>, then the username and the address.',
+  'min-length':'Require a minimum password length.','block-for':'Block logins for a while after too many failed tries.','exec-timeout':'Log idle sessions out after a set time.',
+  'erase start':'Erase the startup configuration from NVRAM.','delete':'Delete the VLAN database file from flash.','reload':'Restart the device.',
+  'show version':'Look at <code>show version</code>.','config-register':'Set the configuration register.','show flash':'List the files in flash.',
+  'show ip int brief':'Check the interfaces with <code>show ip interface brief</code>.','show run':'Check the running configuration.','show interfaces':'Look at <code>show interfaces</code>.','show ip route':'Look at the routing table.',
+  'ipconfig':'Check the PC’s settings with <code>ipconfig</code>.'};
+function helpSteps(goal,d,t){
+  const exact=showMe(goal,d),net=t&&t.net?t.net:{devices:{[d.name]:d}};
+  const cn=I.clone({devices:net.devices,links:net.links||[],routing:net.routing});const dc=cn.devices[Object.keys(net.devices).find(k=>net.devices[k]===d)||d.name]||I.clone(d);
+  const given=(t&&t.given||[]).filter(([,v])=>v&&String(v).length>=2);
+  const ph=(c,id)=>{
+    if(id==='description')return 'description <text>';if(id==='banner motd')return 'banner motd #<message>#';
+    let o=' '+c+' ';
+    o=o.replace(/(\s)(\d{1,3}(?:\.\d{1,3}){3})(?=[\s/])/g,(m,sp,a)=>sp+(I.isMask(a)&&/^255\./.test(a)?'<subnet mask>':id==='ip default-gateway'?'<gateway address>':'<address>'));
+    given.slice().sort((a,b)=>String(b[1]).length-String(a[1]).length).forEach(([k,v])=>{o=o.split(' '+v+' ').join(` <${k.toLowerCase()}> `);});
+    return o.trim();};
+  const words=[],syntax=[];let prev='',prevId='';
+  const skipLogin=()=>{const p=I.pendingPrompt(dc);if(p&&p.mask&&dc.type!=='pc'){dc.pending=null;}};
+  skipLogin(); // a console that starts at its login prompt
+  exact.forEach(c=>{if(c===''){syntax.push('');try{I.run(dc,c,cn);}catch(e){}return;}
+    const pend=I.pendingPrompt(dc),mode=I.activeMode(dc);
+    if(pend){syntax.push(c===''?'':(pend.mask?'<password>':ph(c,'')));if(c!==''&&!pend.mask)words.push(`Answer the prompt: ${pend.prompt.replace(/[<>]/g,'')}`);}
+    else if(prevId==='crypto key'&&/^\d+$/.test(c)){words.push('When it asks how many bits, answer with the key size.');syntax.push('<key size>');prevId='';}
+    else if(prevId==='ssh'){words.push('Enter the user’s password when it asks.');syntax.push('<password>');prevId='';}
+    else{const r=I.parse(mode,c,dc);const id=r&&r.ok?r.id:'';prevId=id;let w=HELPW[id];if(typeof w==='function')w=w(c.split(' ').slice(1).join(' '));
+      if(!w)w=`Run the command for: ${goal.text.replace(/[<>]/g,'')}.`;if(w!==prev)words.push(w);prev=w;syntax.push(ph(c,id));}
+    try{I.run(dc,c,cn);}catch(e){}
+    if(c==='enable'||/^en(a(b(le?)?)?)?$/.test(c)){const p=I.pendingPrompt(dc);if(p&&p.mask){dc.pending=null;dc.mode='priv';}}});
+  return {words,syntax,exact};
+}
+
+
 // 11.9.3 VLSM Design and Implementation, Part 3: same topology, but each LAN has its own mask and the link is a /30
 function vlsmScenario(p){
   const base=I.ip2n(p&&p.vlsm||'192.168.72.0'),hs=String(p&&p.hosts||'50,25,12,6').split(',').map(Number),ip=x=>I.n2ip(x>>>0);
@@ -330,22 +377,28 @@ function subnetTask(p){
 
 // 10.3.4 Connect a Router to a LAN: read show output, address and describe four router interfaces, save, verify.
 // The handout's fixed addresses; R1 and R2 already run OSPF over their serial link, so routes appear as LANs come up.
-function connectRouter(){
-  const ip=I.n2ip;
+// 10.3.4 with new addresses and MACs each time, so the answers are found on the routers, not copied from a key
+function crParams(p){const ok=(v,lo,hi)=>/^\d+$/.test(String(v))&&+v>=lo&&+v<=hi;
+  return p&&ok(p.a,1,253)&&ok(p.b,1,254)&&ok(p.c,1,253)&&ok(p.w,0,63)?{a:+p.a,b:+p.b,c:+p.c,w:+p.w}:{a:R(1,253),b:R(1,254),c:R(1,253),w:R(0,63)};}
+function connectRouter(p){
+  const ip=I.n2ip;const P=crParams(p);
+  const L1=`192.168.${P.a}`,L2=`192.168.${P.a+1}`,L3=`10.${P.b}.${P.c}`,L4=`10.${P.b}.${P.c+1}`,W1=`209.165.200.${4*P.w+1}`,W2=`209.165.200.${4*P.w+2}`;
   const R1=I.newDevice('router','R1',{gig:['0/0','0/1']}),R2=I.newDevice('router','R2',{gig:['0/0','0/1']});
-  const pcs=[['PC1','192.168.10.10','192.168.10.1'],['PC2','192.168.11.10','192.168.11.1'],['PC3','10.1.1.10','10.1.1.1'],['PC4','10.1.2.10','10.1.2.1']];
+  const hex=n=>Array.from({length:n},()=>'0123456789abcdef'[R(0,15)]).join('');
+  [R1,R2].forEach(r=>{const o=hex(6);r.macs={'GigabitEthernet0/0':`00${o.slice(0,2)}.${o.slice(2)}.${hex(3)}1`,'GigabitEthernet0/1':`00${o.slice(0,2)}.${o.slice(2)}.${hex(3)}2`};});
+  const pcs=[['PC1',`${L1}.10`,`${L1}.1`],['PC2',`${L2}.10`,`${L2}.1`],['PC3',`${L3}.10`,`${L3}.1`],['PC4',`${L4}.10`,`${L4}.1`]];
   const devs={R1,R2};pcs.forEach(([n,a,g])=>{devs[n]=I.newDevice('pc',n);pcSet(devs[n],a,'255.255.255.0',g);});
   const net={devices:devs,links:[['R1','Serial0/0/0','R2','Serial0/0/0']],routing:true};
-  [[R1,'209.165.200.225'],[R2,'209.165.200.226']].forEach(([r,a])=>preCfg(r,[`hostname ${r.name}`,'enable secret class','line console 0','password cisco','login','exit','int s0/0/0',`ip address ${a} 255.255.255.252`,'no shutdown'],net));
+  [[R1,W1],[R2,W2]].forEach(([r,a])=>preCfg(r,[`hostname ${r.name}`,'enable secret class','line console 0','password cisco','login','exit','int s0/0/0',`ip address ${a} 255.255.255.252`,'no shutdown'],net));
   // like the .pka: the consoles start at the login prompt (password cisco)
   [R1,R2].forEach(r=>{r.mode='user';r.out=[];I.sessionStart(r);r.out=[];});
-  const LANS=[[R1,'GigabitEthernet0/0','G0/0','192.168.10.1','S1'],[R1,'GigabitEthernet0/1','G0/1','192.168.11.1','S2'],[R2,'GigabitEthernet0/0','G0/0','10.1.1.1','S3'],[R2,'GigabitEthernet0/1','G0/1','10.1.2.1','S4']];
+  const LANS=[[R1,'GigabitEthernet0/0','G0/0',`${L1}.1`,'S1'],[R1,'GigabitEthernet0/1','G0/1',`${L2}.1`,'S2'],[R2,'GigabitEthernet0/0','G0/0',`${L3}.1`,'S3'],[R2,'GigabitEthernet0/1','G0/1',`${L4}.1`,'S4']];
   const goals=[
     ...LANS.map(([r,n,sh,a,sw])=>G1(`${r.name} ${sh}: ${a} 255.255.255.0, turned on, with a description (like “LAN connection to ${sw}”)`,r.name,`if:${n}`,[`interface ${sh.toLowerCase()}`,`ip address ${a} 255.255.255.0`,'no shutdown',`description LAN connection to ${sw}`],
       ()=>has(r,n,a,'255.255.255.0')&&up(r,n)&&!!(r.cfg.ifaces[n].desc||'').trim())),
     ...[R1,R2].map(r=>G1(`Save ${r.name}’s configuration to NVRAM`,r.name,'priv',['copy running-config startup-config',''],()=>{const st=r.startup;return !!st&&LANS.filter(x=>x[0]===r).every(([,n,,a])=>st.ifaces[n]&&st.ifaces[n].ip===a&&!st.ifaces[n].shutdown&&st.ifaces[n].desc);})),
-    G1('Test: from PC1, ping PC4 (10.1.2.10)','PC1','pc',['ping 10.1.2.10'],()=>pinged(devs.PC1,'10.1.2.10')),
-    G1('Test: from R2, ping PC2 (192.168.11.10)','R2','priv',['ping 192.168.11.10'],()=>pinged(R2,'192.168.11.10')),
+    G1(`Test: from PC1, ping PC4 (${L4}.10)`,'PC1','pc',[`ping ${L4}.10`],()=>pinged(devs.PC1,`${L4}.10`)),
+    G1(`Test: from R2, ping PC2 (${L2}.10)`,'R2','priv',[`ping ${L2}.10`],()=>pinged(R2,`${L2}.10`)),
   ];
   // the handout's questions, checked against the devices as they are when you answer
   const cmd=(id,ifc)=>v=>{const t=String(v).trim().replace(/^R\d[>#]\s*/i,'');const r=I.parse('priv',t,R1);return !!(r&&r.ok&&r.id===id&&(ifc?r.args[0]&&I.ifaceName(r.args[0],R1)===ifc:!r.args.length));};
@@ -355,32 +408,32 @@ function connectRouter(){
   const upN=r=>Object.entries(r.cfg.ifaces).filter(([n,x])=>x.ip&&!x.shutdown).length;
   const macOK=v=>String(v).toLowerCase().replace(/[^0-9a-f]/g,'')===I.macOf(R1,'GigabitEthernet0/0').replace(/\./g,'');
   const questions=[
-    {text:'Which command displays the statistics for all interfaces configured on a router?',check:cmd('show interfaces'),answer:'show interfaces'},
-    {text:'Which command displays the information about the Serial 0/0/0 interface only?',check:cmd('show interfaces','Serial0/0/0'),answer:'show interfaces serial 0/0/0'},
-    {text:'What is the IP address configured on R1’s Serial 0/0/0?',check:v=>/^\s*209\.165\.200\.225(\s*\/\s*30)?\s*$/.test(v),answer:'209.165.200.225/30',how:'show interfaces serial 0/0/0, the “Internet address is” line'},
-    {text:'What is the bandwidth on the Serial 0/0/0 interface?',check:v=>/^\s*1\s*,?\s*544\s*(k|kb|kbit|kbps|kbit\/sec)?\s*$/i.test(v),answer:'1544 Kbit/sec',how:'the BW value in show interfaces serial 0/0/0'},
-    {text:'What is the MAC address of R1’s GigabitEthernet 0/0 interface?',check:macOK,answer:I.macOf(R1,'GigabitEthernet0/0'),how:'show interfaces gigabitethernet 0/0, “address is …”'},
-    {text:'What is the bandwidth (BW) of the GigabitEthernet 0/0 interface?',check:v=>/^\s*1\s*,?\s*000\s*,?\s*000\s*(k|kb|kbit|kbps|kbit\/sec)?\s*$/i.test(v)||/^\s*1\s*(g|gb|gbps|gbit)\s*$/i.test(v),answer:'1000000 Kbit/sec',how:'the BW value in show interfaces gigabitethernet 0/0'},
-    {text:'Which command displays a brief summary of the interfaces, their status, and their IP addresses?',check:cmd('show ip int brief'),answer:'show ip interface brief'},
-    {text:'How many serial interfaces does each router have?',check:num(()=>Object.keys(R1.cfg.ifaces).filter(n=>n.startsWith('Serial')).length),answer:'2',how:'count the Serial lines in show ip interface brief'},
-    {text:'How many Ethernet interfaces does each router have?',check:num(()=>Object.keys(R1.cfg.ifaces).filter(n=>n.startsWith('Gigabit')).length),answer:'2',how:'count the GigabitEthernet lines in show ip interface brief'},
-    {text:'What command displays the contents of the routing table?',check:cmd('show ip route'),answer:'show ip route'},
-    {text:'How many connected routes (code C) does R1 have right now?',check:num(()=>Cn(R1)),get answer(){return String(Cn(R1));},how:'count the C lines in show ip route on R1'},
-    {text:'How does a router handle a packet for a network that isn’t in its routing table?',options:['It floods it out every interface','It sends it back to the source','It drops the packet','It broadcasts an ARP request for it'],check:v=>v==='It drops the packet',answer:'It drops the packet (no route and no default route)'},
-    {text:'After configuring: how many interfaces on R1 have an IP address and are up/up?',check:num(()=>upN(R1)),get answer(){return String(upN(R1));},how:'show ip interface brief on R1'},
-    {text:'What part of the interface configuration is NOT shown by show ip interface brief?',check:v=>/mask|prefix|description/i.test(v),answer:'The subnet mask (and the description)'},
-    {text:'Which command can you use to verify that part?',check:v=>cmd('show run')(v)||cmd('show interfaces')(v)||/^\s*sh\w*\s+(run|interfaces?)\b/i.test(String(v).trim().replace(/^R\d[>#]\s*/i,'')),answer:'show running-config, or show interfaces'},
-    {text:'After configuring: how many connected (C) routes does each router have?',check:num(()=>Cn(R1)),get answer(){return String(Cn(R1));},how:'show ip route, count the C lines'},
-    {text:'After configuring: how many OSPF (O) routes does each router have?',check:num(()=>On(R1)),get answer(){return String(On(R1));},how:'show ip route, count the O lines'},
-    {text:'How many LANs and WANs are in the topology altogether?',check:num(()=>5),answer:'5 (4 LANs and 1 WAN)'},
+    {text:'Which command displays the statistics for all interfaces configured on a router?',check:cmd('show interfaces'),answer:'show interfaces',why:'It’s a <code>show</code> command. The word you want is the plural of what you’re asking about.'},
+    {text:'Which command displays the information about the Serial 0/0/0 interface only?',check:cmd('show interfaces','Serial0/0/0'),answer:'show interfaces serial 0/0/0',why:'Add the interface’s name after the command from the question before.'},
+    {text:'What is the IP address configured on R1’s Serial 0/0/0?',check:v=>new RegExp('^\\s*'+W1.replace(/\./g,'\\.')+'(\\s*/\\s*30)?\\s*$').test(v),answer:W1+'/30',how:'show interfaces serial 0/0/0, the “Internet address is” line',why:'In <code>show interfaces</code> output, the address is on the “Internet address is” line, written with its /prefix.'},
+    {text:'What is the bandwidth on the Serial 0/0/0 interface?',check:v=>/^\s*1\s*,?\s*544\s*(k|kb|kbit|kbps|kbit\/sec)?\s*$/i.test(v),answer:'1544 Kbit/sec',how:'the BW value in show interfaces serial 0/0/0',why:'Bandwidth (BW) is on the line with MTU and DLY, in Kbit/sec.'},
+    {text:'What is the MAC address of R1’s GigabitEthernet 0/0 interface?',check:macOK,answer:I.macOf(R1,'GigabitEthernet0/0'),how:'show interfaces gigabitethernet 0/0, “address is …”',why:'Serial links have no MAC address; Ethernet interfaces do. It’s on the “Hardware is … address is” line, in Cisco’s xxxx.xxxx.xxxx format.'},
+    {text:'What is the bandwidth (BW) of the GigabitEthernet 0/0 interface?',check:v=>/^\s*1\s*,?\s*000\s*,?\s*000\s*(k|kb|kbit|kbps|kbit\/sec)?\s*$/i.test(v)||/^\s*1\s*(g|gb|gbps|gbit)\s*$/i.test(v),answer:'1000000 Kbit/sec',how:'the BW value in show interfaces gigabitethernet 0/0',why:'BW is shown in Kbit/sec, on the line with MTU and DLY. How many Kbit are in a gigabit?'},
+    {text:'Which command displays a brief summary of the interfaces, their status, and their IP addresses?',check:cmd('show ip int brief'),answer:'show ip interface brief',why:'It’s the one-line-per-interface view: <code>show ip interface</code> plus one more word.'},
+    {text:'How many serial interfaces does each router have?',check:num(()=>Object.keys(R1.cfg.ifaces).filter(n=>n.startsWith('Serial')).length),answer:'2',how:'count the Serial lines in show ip interface brief',why:'Each line of the brief output is one interface; Serial ones start with “Serial”.'},
+    {text:'How many Ethernet interfaces does each router have?',check:num(()=>Object.keys(R1.cfg.ifaces).filter(n=>n.startsWith('Gigabit')).length),answer:'2',how:'count the GigabitEthernet lines in show ip interface brief',why:'Count the GigabitEthernet lines.'},
+    {text:'What command displays the contents of the routing table?',check:cmd('show ip route'),answer:'show ip route',why:'It’s a <code>show ip</code> command.'},
+    {text:'How many connected routes (code C) does R1 have right now?',check:num(()=>Cn(R1)),get answer(){return String(Cn(R1));},how:'count the C lines in show ip route on R1',why:'A router only has a C route for an interface that has an address <b>and</b> is up/up. Right now only the serial link is configured.'},
+    {text:'How does a router handle a packet for a network that isn’t in its routing table?',options:['It floods it out every interface','It sends it back to the source','It drops the packet','It broadcasts an ARP request for it'],check:v=>v==='It drops the packet',answer:'It drops the packet (no route and no default route)',why:'With no matching route and no default route, the router has nowhere to send it.'},
+    {text:'After configuring: how many interfaces on R1 have an IP address and are up/up?',check:num(()=>upN(R1)),get answer(){return String(upN(R1));},how:'show ip interface brief on R1',why:'Count the lines with an address and up/up in both columns.'},
+    {text:'What part of the interface configuration is NOT shown by show ip interface brief?',check:v=>/mask|prefix|description/i.test(v),answer:'The subnet mask (and the description)',why:'Brief output shows the address, but not how big the network is, or what the interface is for.'},
+    {text:'Which command can you use to verify that part?',check:v=>cmd('show run')(v)||cmd('show interfaces')(v)||/^\s*sh\w*\s+(run|interfaces?)\b/i.test(String(v).trim().replace(/^R\d[>#]\s*/i,'')),answer:'show running-config, or show interfaces',why:'Any command that shows the full interface configuration works.'},
+    {text:'After configuring: how many connected (C) routes does each router have?',check:num(()=>Cn(R1)),get answer(){return String(Cn(R1));},how:'show ip route, count the C lines',why:'One C route per configured, up interface: the serial link plus the LANs.'},
+    {text:'After configuring: how many OSPF (O) routes does each router have?',check:num(()=>On(R1)),get answer(){return String(On(R1));},how:'show ip route, count the O lines',why:'OSPF teaches each router the other router’s LANs.'},
+    {text:'How many LANs and WANs are in the topology altogether?',check:num(()=>5),answer:'5 (4 LANs and 1 WAN)',why:'Count the networks: each router LAN, plus the serial link between them.'},
   ];
   return {net,tabs:['R1','R2','PC1'],
     intro:'The Cisco Packet Tracer lab 10.3.4. Use show commands to read R1 and R2, then address and describe their four LAN interfaces from the Addressing Table, save, and check that every network shows up in the routing tables. The serial link and OSPF are already set up; the switches aren’t configured, so you can’t ping them.',
     given:[['Console password','cisco'],['Enable secret','class']],
-    table:[['R1','G0/0','192.168.10.1','255.255.255.0','N/A'],['R1','G0/1','192.168.11.1','255.255.255.0','N/A'],['R1','S0/0/0 (DCE)','209.165.200.225','255.255.255.252','N/A'],
-      ['R2','G0/0','10.1.1.1','255.255.255.0','N/A'],['R2','G0/1','10.1.2.1','255.255.255.0','N/A'],['R2','S0/0/0','209.165.200.226','255.255.255.252','N/A'],
+    params:P,table:[['R1','G0/0',`${L1}.1`,'255.255.255.0','N/A'],['R1','G0/1',`${L2}.1`,'255.255.255.0','N/A'],['R1','S0/0/0 (DCE)',W1,'255.255.255.252','N/A'],
+      ['R2','G0/0',`${L3}.1`,'255.255.255.0','N/A'],['R2','G0/1',`${L4}.1`,'255.255.255.0','N/A'],['R2','S0/0/0',W2,'255.255.255.252','N/A'],
       ...pcs.map(([n,a,g])=>[n,'NIC',a,'255.255.255.0',g])],tableHead:['Device','Interface','IP address','Subnet mask','Default gateway'],goals,questions};
 }
-const C={DRILLS,IDNAME,TASKS,CHEAT,scenario,vlsmScenario,subnetTask,connectRouter,pick,R,navTo,showMe};
+const C={DRILLS,IDNAME,TASKS,CHEAT,scenario,vlsmScenario,subnetTask,connectRouter,pick,R,navTo,showMe,helpSteps};
 if(typeof module!=='undefined'&&module.exports)module.exports=C;else root.CS=C;
 })(typeof window!=='undefined'?window:globalThis);

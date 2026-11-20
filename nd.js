@@ -22,18 +22,29 @@ function solicited(a){const g=expand(a);return compress(['ff02','0','0','0','0',
 function mcastMac(a){const g=expand(a);return `3333.ff${g[6].slice(2)}.${g[7]}`;}
 const U=a=>String(a).toUpperCase();
 // ---------- the network ----------
-function build(){
+// new prefixes, host addresses and MACs each time (fixed ones can be passed in for tests)
+function plan(o){
+  const rnd=n=>Math.floor(Math.random()*n),hx=(n)=>Array.from({length:n},()=>'0123456789abcdef'[rnd(16)]).join('');
+  const site=(o&&o.site)||hx(4).replace(/^0+(?=.)/,''),a=(o&&o.a)||String(1+rnd(9)),b=(o&&o.b)||String(Number(a)%9+1+(Number(a)%9+1===Number(a)?1:0));
+  const hid=()=>{let v;do{v=(16+rnd(240)).toString(16);}while(v==='1');return v;};
+  let h1=(o&&o.h1)||hid(),h2=(o&&o.h2)||hid(),h3=(o&&o.h3)||hid();while(h2===h1)h2=hid();
+  const oui=()=>['00d0','0060','0090','0030','000c','0050','00e0','0001'][rnd(8)]+'.'+hx(4)+'.'+hx(4);
+  const rmac=(o&&o.rmac)||('0030.'+hx(4)+'.'+hx(3));
+  return {site,a,b,h1,h2,h3,m1:(o&&o.m1)||oui(),m2:(o&&o.m2)||oui(),m3:(o&&o.m3)||oui(),r0:rmac+'1',r1:rmac+'2'};
+}
+function build(o){
+  const P=plan(o),A=`2001:db8:${P.site}:${P.a}::`,B=`2001:db8:${P.site}:${P.b}::`;
   const RTA=I.newDevice('router','RTA',{gig:['0/0/0','0/0/1']});
-  RTA.macs={'GigabitEthernet0/0/0':'0030.f2a8.6401','GigabitEthernet0/0/1':'0030.f2a8.6402'};
-  const host=(name,ip,mac)=>{const d=I.newDevice('pc',name);d.v6={ip,mac,ll:I.eui64ll(mac),gw:'fe80::1'};d.nc={};return d;};
-  const PCA1=host('PCA1','2001:db8:acad:1::a','00d0.bc52.4e7a'),PCA2=host('PCA2','2001:db8:acad:1::b','0060.2f3b.11c4'),PCB1=host('PCB1','2001:db8:acad:2::a','0090.0c5d.9a33');
+  RTA.macs={'GigabitEthernet0/0/0':P.r0,'GigabitEthernet0/0/1':P.r1};
+  const host=(name,ip,mac)=>{const d=I.newDevice('pc',name);d.v6={ip:norm(ip),mac,ll:I.eui64ll(mac),gw:'fe80::1'};d.nc={};return d;};
+  const PCA1=host('PCA1',A+P.h1,P.m1),PCA2=host('PCA2',A+P.h2,P.m2),PCB1=host('PCB1',B+P.h3,P.m3);
   const net={devices:{RTA,PCA1,PCA2,PCB1},links:[]};
-  const pre=['enable','configure terminal','hostname RTA','ipv6 unicast-routing','interface g0/0/0','ipv6 address 2001:db8:acad:1::1/64','ipv6 address fe80::1 link-local','no shutdown',
-    'interface g0/0/1','ipv6 address 2001:db8:acad:2::1/64','ipv6 address fe80::1 link-local','no shutdown','end'];
+  const pre=['enable','configure terminal','hostname RTA','ipv6 unicast-routing','interface g0/0/0',`ipv6 address ${A}1/64`,'ipv6 address fe80::1 link-local','no shutdown',
+    'interface g0/0/1',`ipv6 address ${B}1/64`,'ipv6 address fe80::1 link-local','no shutdown','end'];
   pre.forEach(c=>I.run(RTA,c,net));RTA.log=[];RTA.out=[];RTA.seen={};RTA.nd6=[];RTA.mode='user';
-  const LAN={'2001:db8:acad:1::':{sw:'SwitchA',ifc:'GigabitEthernet0/0/0',short:'Gig0/0/0',hosts:[PCA1,PCA2]},'2001:db8:acad:2::':{sw:'SwitchB',ifc:'GigabitEthernet0/0/1',short:'Gig0/0/1',hosts:[PCB1]}};
+  const LAN={[A]:{sw:'SwitchA',ifc:'GigabitEthernet0/0/0',short:'Gig0/0/0',hosts:[PCA1,PCA2],pre:A},[B]:{sw:'SwitchB',ifc:'GigabitEthernet0/0/1',short:'Gig0/0/1',hosts:[PCB1],pre:B}};
   const lanOf=a=>{for(const [p,v] of Object.entries(LAN))if(on64(a,p+'1'))return v;return null;};
-  const rIf=L=>({ip:L===LAN['2001:db8:acad:1::']?'2001:db8:acad:1::1':'2001:db8:acad:2::1',ll:'fe80::1',mac:RTA.macs[L.ifc]});
+  const rIf=L=>({ip:norm(L.pre+'1'),ll:'fe80::1',mac:RTA.macs[L.ifc]});
   const M={sim:false,events:[],t:0};
   // the router's neighbor table (what show ipv6 neighbors prints)
   const rLearn=(ip,mac,L)=>{ip=norm(ip);const e=RTA.nd6.find(x=>same(x.ip,ip));if(e){e.mac=mac;e.iface=L.short;return;}RTA.nd6.push({ip,mac,iface:L.short});};
@@ -107,7 +118,7 @@ function build(){
   net.ping6=(d,dst)=>{d.pings6=(d.pings6||[]).concat([norm(dst)]);const r=ping(d,dst);M.lastPing={src:d===RTA?'RTA':d.name,dst:norm(dst),ok:!!r,ndp:M.events.some(e=>e.type==='NDP')};return r;};
   M.reset=()=>{M.events=[];M.t=0;};
   M.clearAll=()=>{RTA.nd6=[];[PCA1,PCA2,PCB1].forEach(p=>{p.nc={};});};
-  return {net,M,RTA,PCA1,PCA2,PCB1,LAN};
+  return {net,M,RTA,PCA1,PCA2,PCB1,LAN,P,A:norm(A+'1').replace(/1$/,''),B:norm(B+'1').replace(/1$/,'')};
 }
 const ND={build,expand,compress,norm,same,solicited,mcastMac};
 if(typeof module!=='undefined'&&module.exports)module.exports=ND;else root.ND=ND;
