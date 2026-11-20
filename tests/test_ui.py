@@ -126,7 +126,7 @@ with sync_playwright() as pw:
     # ---------- phone ----------
     ctx = b.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True); pg = ctx.new_page(); errs = []
     pg.on('pageerror', lambda e: errs.append(str(e)))
-    for q in ['', '?tab=tasks', '?task=scenario&lab=192.168.100.0&hosts=25&r1=2&r2=2', '?tab=sandbox', '?tab=cheat']:
+    for q in ['', '?tab=tasks', '?task=scenario&lab=192.168.100.0&hosts=25&r1=2&r2=2', '?lab=192.168.100.0&hosts=25&r1=2&r2=2', '?tab=sandbox', '?tab=cheat']:
         pg.goto(URL + q); pg.wait_for_timeout(250)
         ok(f'phone: nothing wider than the screen ({q or "drills"})', pg.evaluate('document.documentElement.scrollWidth') <= 390, pg.evaluate('document.documentElement.scrollWidth'))
     pg.goto(URL + '?task=basic-router'); pg.wait_for_timeout(200)

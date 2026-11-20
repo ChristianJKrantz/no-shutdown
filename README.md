@@ -2,7 +2,7 @@
 
 **Practice Cisco IOS commands on a simulated router and switch, in your browser.**
 
-Type real commands at a router, switch or PC prompt and get IOS's own error messages, plus a short note that explains what went wrong. It covers what an intro networking course covers: getting around the modes, first-time setup, passwords, interfaces, switch management, SSH, login hardening, and saving, backing up and resetting a device.
+Type real commands at a router, switch or PC prompt and get IOS's own error messages, plus a short note that explains what went wrong. It covers what an intro networking course covers: getting around the modes, first-time setup, passwords, interfaces, switch management, SSH, login hardening, and saving, backing up and resetting a device. It also has the whole Cisco Packet Tracer **Subnetting Scenario** lab (11.7.5): the subnetting and Addressing Table in Part 1, then configuring the devices in Part 2.
 
 ### ▶ [Try it here](https://christianjkrantz.github.io/no-shutdown/)
 
@@ -47,14 +47,31 @@ Ten multi-step configurations, each with a checklist of goals that tick off as y
 - **Show me the next step** lists the commands for the next unmet goal, from the prompt you're at now. Finishing without it earns three stars; each use costs some.
 - Tasks with several devices have a tab for each one. PCs have an **IP Configuration** form and a **Command Prompt** (`ping`, `ipconfig`, `ssh -l`), like Packet Tracer's Desktop tab.
 
-#### Coming from Subnet Sprint
-Subnet Sprint's Packet Tracer lab mode does Part 1 of the Subnetting Scenario (the subnetting and the Addressing Table). Its "Part 2" link opens the matching task here with the same network, so the addresses carry over:
+### Packet Tracer lab
+The Cisco Packet Tracer lab **11.7.5 Subnetting Scenario**, both parts, on the same network.
+
+**Part 1** asks one question at a time, in the handout's order:
+- **Step 1:** how many subnets the topology needs, how many bits to borrow, the subnets and hosts that makes, each subnet's binary value, the new mask, and the full subnet table.
+- **Step 2:** assign the subnets to the LANs and the R1–R2 link.
+- **Step 3:** fill in the Addressing Table by its rules. Routers take the first usable address on their LANs, R2 the last on the WAN link, switches the second usable, and PCs the last.
+
+Feedback names the mistake without giving the answer away. It catches forgetting the WAN link, borrowing too many bits, leaving off the − 2, writing the subnet number instead of its binary value, putting a device on the wrong subnet, and pointing a PC's gateway at the switch. **Hint** walks through the step a line at a time, and **Show the answer** fills it in. The subnet table and Addressing Table fill in beside the questions as you go.
+
+- Practice all of Part 1, just Step 1, or just Steps 2–3 (with Step 1's subnet table given).
+- **Your own lab** takes any /24, the addresses each LAN needs, and 1–3 LANs per router. The address bar then links to that exact lab.
+- **Print** gives the lab in the handout's format, with an optional answer key.
+- **Part 2: configure the devices** opens the configuration task on the same network: R1's LAN interfaces, S3's management address and gateway, and PC4's settings, then the pings. It links back to Part 1.
+
+Lab links take the network in the address bar:
 
 ```
-https://christianjkrantz.github.io/no-shutdown/?task=scenario&lab=192.168.100.0&hosts=25&r1=2&r2=2
+https://christianjkrantz.github.io/no-shutdown/?lab=192.168.100.0&hosts=25&r1=2&r2=2            Part 1
+https://christianjkrantz.github.io/no-shutdown/?task=scenario&lab=192.168.100.0&hosts=25&r1=2&r2=2   Part 2
 ```
 
-`lab` is the /24 network, `hosts` the addresses each LAN needs, and `r1`/`r2` how many LANs each router has. Values that don't make a valid lab are ignored and the task uses random ones.
+`lab` is the /24 network, `hosts` the addresses each LAN needs, and `r1`/`r2` how many LANs each router has. Values that don't make a valid lab are ignored and you get a random one. Old Packet Tracer lab links from Subnet Sprint forward here.
+
+![The Packet Tracer lab partway through Step 3: the topology, a question with feedback about the wrong subnet, and the Addressing Table filling in](docs/lab.png)
 
 ![The Subnetting Scenario task: R1, S3 and PC4 tabs, with the addressing table under the console](docs/scenario.png)
 
@@ -96,10 +113,12 @@ node tests/test_ios.js        # the IOS simulator: modes, errors, help, password
 node tests/solve_tasks.js     # solves every task 25 times with fresh values using its own Show me steps,
                               # and checks every drill answer and shortcut is accepted
 python3 tests/test_ui.py      # browser tests with Playwright: drills, completing all ten tasks by typing,
-                              # the Subnet Sprint link and bad values, phone layout, and typed HTML staying text
+                              # lab links and bad values, phone layout, and typed HTML staying text
+python3 tests/test_lab.py     # the Packet Tracer lab: the 11.7.5 answers, 300 random networks, feedback for
+                              # common mistakes, hints, parts, your own lab, printing, phones, Part 1 ↔ Part 2
 ```
 
-`test_ui.py` needs `pip install playwright` and `playwright install chromium`.
+The browser tests need `pip install playwright` and `playwright install chromium`.
 
 ## Files
 
@@ -108,7 +127,8 @@ python3 tests/test_ui.py      # browser tests with Playwright: drills, completin
 | `index.html` | The page and its styles |
 | `ios.js` | The IOS simulator: command grammar, modes, errors, help, device state, ping and SSH |
 | `content.js` | Drills, tasks and the cheat sheet |
-| `app.js` | The interface: console, PC panel, drills, tasks, sandbox |
+| `lab.js` | The Packet Tracer lab's Part 1: the network, questions, feedback, hints and printout |
+| `app.js` | The interface: console, PC panel, drills, tasks, the lab, sandbox |
 | `sw.js`, `manifest.webmanifest` | Offline support and app install |
 
 ## License

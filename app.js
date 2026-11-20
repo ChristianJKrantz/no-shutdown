@@ -11,7 +11,7 @@ const isDesktop=()=>window.matchMedia&&matchMedia('(hover:hover) and (pointer:fi
 const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
 
 /* ---------------- stats ---------------- */
-const S={drill:store.get('ns_drill',{right:0,tried:0,streak:0,best:0}),tasks:store.get('ns_tasks',{})};
+const S={drill:store.get('ns_drill',{right:0,tried:0,streak:0,best:0}),tasks:store.get('ns_tasks',{}),labs:store.get('ns_labs',0)};
 function renderStats(){$('#sStreak').textContent=S.drill.streak;$('#sAcc').textContent=S.drill.tried?Math.round(100*S.drill.right/S.drill.tried)+'%':'–';
   $('#sTasks').textContent=`${Object.values(S.tasks).filter(t=>t.done).length}/${CS.TASKS.length}`;}
 
@@ -80,9 +80,10 @@ function PCPanel(pc,net,onChange){
 let view=null;
 function go(v,arg){
   view=v;$$('#tabs .tab').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
-  ['drills','tasks','sandbox','cheat'].forEach(k=>{$('#v-'+k).hidden=k!==v;});
+  ['drills','tasks','lab','sandbox','cheat'].forEach(k=>{$('#v-'+k).hidden=k!==v;});
   if(v==='drills')Drills.start();
   if(v==='tasks'){if(arg)Tasks.open(arg.id,arg.params);else Tasks.list();}
+  if(v==='lab')Lab.start(arg&&arg.lab);
   if(v==='sandbox')Sandbox.start();
   if(v==='cheat')Cheat.render();
 }
@@ -160,8 +161,8 @@ const Tasks=(()=>{
     root.textContent='';
     const side=el('div',{class:'card tside'}),main=el('div',{class:'card tmain'});root.append(el('div',{class:'tview'},side,main));
     // side: intro, given values, table, goals
-    side.append(el('div',{class:'row',style:'justify-content:space-between'},el('span',{class:'dim mono',style:'font-size:12px',text:T.level.toUpperCase()}),el('button',{class:'btn small ghost',type:'button',text:'← All tasks',onclick:()=>{setURL('');try{history.replaceState(null,'',location.pathname+'?tab=tasks');}catch(e){}list();}})),
-      el('h2',{text:T.title}),el('p',{html:t.intro}));
+    add(side,el('div',{class:'row',style:'justify-content:space-between'},el('span',{class:'dim mono',style:'font-size:12px',text:T.level.toUpperCase()}),el('button',{class:'btn small ghost',type:'button',text:'← All tasks',onclick:()=>{setURL('');try{history.replaceState(null,'',location.pathname+'?tab=tasks');}catch(e){}list();}})),
+      el('h2',{text:T.title}),el('p',{html:t.intro}),id==='scenario'?el('button',{class:'btn small',type:'button',text:'← Part 1: subnetting and the Addressing Table',onclick:()=>{const p=t.params||{};go('lab',{lab:{kind:'lab',base:p.lab,hosts:p.hosts,r1:p.r1,r2:p.r2}});}}):null);
     if(t.given)side.append(el('table',{class:'given'},...t.given.map(([k,v])=>el('tr',null,el('td',{text:k}),el('td',{class:'v',text:v})))));
     const tableEl=!t.table?null:(el('details',{open:!matchMedia('(max-width:900px)').matches},el('summary',{class:'dim mono',style:'cursor:pointer;font-size:12px',text:'ADDRESSING TABLE'}),el('div',{class:'tablewrap'},el('table',{class:'given'},el('tr',null,...(t.tableHead||['Device','Interface','IP address','Mask','Note']).map(h=>el('th',{text:h}))),...t.table.map(r=>el('tr',null,...r.map((c,i)=>el('td',{class:i>=2?'v':'',text:c}))))))));
     const ul=el('ul',{class:'goals',id:'goals'},...t.goals.map((g,i)=>el('li',{'data-i':i},el('i',{'aria-hidden':'true'}),el('span',null,g.text,t.tabs.length>1?el('span',{class:'dv',text:g.dev}):null))));
@@ -241,6 +242,104 @@ window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferred=e;
 $('#installBtn').onclick=async()=>{if(deferred){deferred.prompt();await deferred.userChoice.catch(()=>{});deferred=null;$('#installBtn').hidden=true;}};
 if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
 
+
+/* ---------------- Packet Tracer lab: Part 1 (subnetting + Addressing Table) here, Part 2 = the scenario task ---------------- */
+const Lab=(()=>{
+  const PARTS=LAB.LABPARTS;let q=null,pr=null,k=0,miss=[],first=0,justDone=-1,done=false,msg='',msgCls='',hintN=0;
+  let part=store.get('ns_labpart','all');if(!PARTS[part])part='all';
+  const root=()=>$('#v-lab'),ipStr=LAB.ipStr,oct=LAB.oct;
+  const asParams=L=>({lab:ipStr(L.base),hosts:L.hosts,r1:L.r1,r2:L.r2});
+  function setURL(){try{const u=new URL(location.href);u.search='';u.searchParams.set('tab','lab');if(pr)Object.entries(asParams(q.L)).forEach(([a,b])=>u.searchParams.set(a,b));history.replaceState(null,'',u.toString());}catch(e){}}
+  function load(fixed){pr=fixed||null;q=LAB.genLab(fixed||null,part);k=0;miss=q.fields.map(()=>false);first=0;justDone=-1;done=false;msg='';hintN=0;setURL();render();}
+  function start(fixed){if(fixed||!q)load(fixed);else render();}
+  const ipCell=v=>`<span class="ipf">${ipStr(v)}</span><span class="ips">.${oct(v,3)}</span>`;
+  // the tables fill in as you answer (same layout as the lab handout)
+  function sheet(){
+    const n=q.fields.length,cur=done?-1:k,end=done?n:k,f=q.fields[cur<0?n-1:cur],L=q.L,key=f.key;
+    const cls=j=>`${miss[j]?' miss':''}${j===justDone?' pop':''}`;
+    const val=j=>{const g=q.fields[j];return g.type==='ip'?ipCell(g.answer):g.answer;};
+    const S1=['need','bits','made','hper','enet','ebits','mbits','mdec'];
+    const sec=S1.includes(key)?'s1':key[0]==='g'?'g':'t';
+    const idx=pred=>q.fields.map((g,j)=>[g,j]).filter(([g])=>pred(g));
+    const cell=j=>j<end?`<span class="fs-cv${cls(j)}">${val(j)}</span>`:j===cur?'<span class="fs-cur">?</span>':'';
+    if(sec==='s1'){const rows=idx(g=>S1.includes(g.key)).filter(([,j])=>j<end);if(!rows.length)return '';
+      return `<div class="fsheet"><div class="fs-sec">Step 1 so far</div>${rows.map(([g,j])=>`<div class="fs-row${cls(j)}"><span>${g.label}</span><b class="mono">${val(j)}</b></div>`).join('')}</div>`;}
+    if(sec==='g'){const js=kk=>idx(g=>g.k===kk&&g.key[0]==='g').map(([,j])=>j);
+      const rows=L.subs.map(s=>{const a=js(s.k);if(!a.length||a[0]>Math.max(end-1,cur))return '';return `<tr><td class="fs-rl">${s.k}</td>${a.map(j=>`<td>${cell(j)}</td>`).join('')}</tr>`;}).join('');
+      return `<div class="fsheet"><div class="fs-sec">Subnet table</div><div class="tablewrap"><table class="fs-chart"><tr><th>#</th><th>Subnet address</th><th>First usable</th><th>Last usable</th><th>Broadcast</th></tr>${rows}</table></div></div>`;}
+    const ref=part!=='subnet'?`<details class="fs-ref"${key==='asg'?' open':''}><summary>Subnet table${part==='table'?' (Step 1, done for you)':' (from Step 1)'}</summary><div class="tablewrap">${q.subTable}</div></details>`:'';
+    const asg=idx(g=>g.key==='asg').filter(([,j])=>j<=Math.max(end-1,cur));
+    const A=idx(g=>['aip','amask','agw'].includes(g.key)),mj=(A.find(([g])=>g.key==='amask')||[])[1];
+    const rows=L.rows.map(r=>{const ip=A.find(([g])=>g.key==='aip'&&g.r===r),gw=A.find(([g])=>g.key==='agw'&&g.r===r);if(!ip||ip[1]>Math.max(end-1,cur))return '';
+      return `<tr><td class="fs-rl">${r.dev}</td><td>${r.ifc}</td><td>${cell(ip[1])}</td><td>${mj!=null&&mj<end?`<span class="fs-cv">${ipCell(L.mask)}</span>`:mj===cur?'<span class="fs-cur">?</span>':''}</td><td>${gw?cell(gw[1]):'<span class="dim">N/A</span>'}</td></tr>`;}).join('');
+    return `<div class="fsheet">${ref}${asg.length?`<div class="fs-sec">Step 2 · Subnet assignments</div><div class="tablewrap"><table class="fs-chart"><tr><th>#</th><th>Link</th><th>Subnet address</th></tr>${asg.map(([g,j])=>`<tr><td class="fs-rl">${g.l.j}</td><td>${g.l.desc.replace('the ','').replace('WAN link between R1 and R2','R1–R2 WAN link')}</td><td>${cell(j)}</td></tr>`).join('')}</table></div>`:''}
+      ${rows?`<div class="fs-sec">Step 3 · Addressing Table</div><div class="tablewrap"><table class="fs-chart"><tr><th>Device</th><th>Interface</th><th>IP</th><th>Mask</th><th>Gateway</th></tr>${rows}</table></div>`:''}</div>`;
+  }
+  function toPart2(){const p=asParams(q.L);go('tasks',{id:'scenario',params:p});try{const u=new URL(location.href);u.search='';u.searchParams.set('task','scenario');Object.entries(p).forEach(([a,b])=>u.searchParams.set(a,b));history.replaceState(null,'',u.toString());}catch(e){}}
+  function check(){
+    if(done)return;const f=q.fields[k],inp=$('#labIn'),raw=LAB.expand(f,inp.value);
+    if(LAB.isBlank(raw)){msg='Type an answer first.';msgCls='coach';renderQ();return;}
+    if(LAB.isRight(f,raw)){if(!miss[k])first++;justDone=k;k++;msg='';hintN=0;if(k>=q.fields.length){done=true;const L=q.L;S.labs=(S.labs||0)+1;store.set('ns_labs',S.labs);}render();return;}
+    miss[k]=true;let d=null;try{d=q.diag(q.fields.map((g,j)=>j===k?raw:j<k?LAB.show(g):''))[k];}catch(e){}
+    // a nudge, not the answer: the worked value stays hidden until “Show the answer”
+    msg=(d?String(d):'That’s not it.').replace(/<b class="g mono">[^<]*<\/b>/g,'<b class="g mono">?</b>')+' <span class="dim">Try again, or use Hint.</span>';msgCls='bad';renderQ();
+  }
+  function own(){
+    const box=$('#labOwn');if(!box.hidden){box.hidden=true;return;}box.hidden=false;box.textContent='';
+    const fld=(lab,id,ph,mode)=>el('label',{},lab,el('input',{id,placeholder:ph,autocomplete:'off',spellcheck:'false',inputmode:mode}));
+    const sel=(lab,id)=>el('label',{},lab,el('select',{id},...[1,2,3].map(v=>el('option',{value:v,text:v,selected:v===2}))));
+    const m=el('div',{class:'own-msg',id:'labOwnMsg'});
+    const goBtn=el('button',{class:'btn primary',type:'button',text:'Load lab',onclick:()=>{const r=LAB.labFrom($('#labNet').value,$('#labHosts').value,$('#labR1').value,$('#labR2').value);
+      if(r.err){m.textContent=r.err;m.className='own-msg bad';return;}box.hidden=true;load(r);}});
+    box.append(el('p',{class:'dim',text:'Set the /24, how many addresses each LAN needs, and how many LANs each router has.'}),
+      el('div',{class:'own-row'},fld('Network','labNet','192.168.100.0','decimal'),fld('Addresses per LAN','labHosts','25','numeric'),sel('LANs on R1','labR1'),sel('LANs on R2','labR2'),goBtn,
+        el('button',{class:'btn small ghost',type:'button',text:'Use the 11.7.5 lab',onclick:()=>{$('#labNet').value='192.168.100.0';$('#labHosts').value='25';$('#labR1').value='2';$('#labR2').value='2';goBtn.click();}})),m);
+    $$('#labNet,#labHosts',box).forEach(i=>i.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();goBtn.click();}}));$('#labNet').focus();
+  }
+  function print(key){
+    const area=$('#printArea');area.innerHTML=`<div class="pp-title"><h2>Packet Tracer: Subnetting Scenario</h2><div>Name ______________________ &nbsp; Date ____________</div></div>${LAB.printLabHTML(q,1,false)}${key?`<div class="pp-key"><div class="pp-title"><h2>Answer key</h2></div>${LAB.printLabHTML(q,1,true)}</div>`:''}`;
+    document.body.classList.add('printing');const off=()=>{document.body.classList.remove('printing');area.textContent='';removeEventListener('afterprint',off);};addEventListener('afterprint',off);
+    try{window.print();}catch(e){}if(!('onafterprint' in window))setTimeout(off,500);
+  }
+  function renderQ(){
+    const box=$('#labQ');if(!box)return;box.textContent='';
+    if(done){const n=q.fields.length;
+      box.append(el('div',{class:'done-banner'},el('b',{text:`Part ${part==='all'?'1':'1 · '+PARTS[part]} done ✓`}),el('span',{text:` ${first} of ${n} right on the first try.`})),
+        el('div',{class:'lab-sol',html:q.explain}),
+        el('div',{class:'dacts'},el('button',{class:'btn primary',type:'button',text:'Part 2: configure the devices →',onclick:toPart2}),el('button',{class:'btn',type:'button',text:'New lab',onclick:()=>load(null)}),pr?el('button',{class:'btn ghost',type:'button',text:'Same network again',onclick:()=>load(pr)}):null));return;}
+    const f=q.fields[k],n=q.fields.length;
+    const inp=el('input',{id:'labIn','aria-label':f.label,autocomplete:'off',autocapitalize:'off',spellcheck:'false',inputmode:f.type==='ip'?'decimal':'numeric',enterkeyhint:'done',
+      placeholder:f.type==='bits'?'8 bits':f.type==='ip'?(f.pre?'last octet':'a.b.c.d'):'number'});
+    inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();check();}});
+    const hs=LAB.hintsFor(q)[k]||[];
+    box.append(el('div',{class:'dmeta'},el('span',{text:`Question ${k+1} of ${n} · ${f.where}`}),el('span',{text:`${first} first-try`})),
+      el('div',{class:'lab-prog'},el('i',{style:`width:${Math.round(100*k/n)}%`})),
+      el('div',{class:'dpurpose',text:f.label}),
+      el('div',{class:'dbox'},f.pre?el('span',{class:'tp',text:f.pre}):null,inp),
+      el('div',{class:'dfb lab-fb'},msg?el('div',{class:msgCls,html:msg}):null,
+        hintN?el('ol',{class:'lab-hints'},...hs.slice(0,hintN).map(s=>el('li',{html:s.q+(s.tip?` <span class="dim">${s.tip}</span>`:'')}))):null),
+      el('div',{class:'dacts'},el('button',{class:'btn primary',type:'button',text:'Check',onclick:check}),
+        hintN<hs.length?el('button',{class:'btn',type:'button',text:hintN?'Next hint':'Hint',onclick:()=>{hintN++;miss[k]=true;renderQ();}}):null,
+        miss[k]?el('button',{class:'btn ghost',type:'button',text:'Show the answer',onclick:()=>{const v=LAB.show(f);inp.value=f.pre&&v.startsWith(f.pre)?v.slice(f.pre.length):v;inp.focus();}}):null));
+    const sh=$('#labSheet');if(sh)sh.innerHTML=sheet();
+    if(isDesktop())inp.focus();
+  }
+  function render(){
+    const r=root();r.textContent='';
+    const seg=el('div',{class:'groups',role:'group','aria-label':'Lab part'},...Object.entries(PARTS).map(([key,name])=>el('button',{class:'chip'+(key===part?' on':''),type:'button',text:name,'aria-pressed':String(key===part),
+      onclick:()=>{part=key;store.set('ns_labpart',part);load(pr||{kind:'lab',base:ipStr(q.L.base),hosts:q.L.hosts,r1:q.L.r1,r2:q.L.r2});}})),
+      el('button',{class:'chip',type:'button',text:'Part 2: configure →',onclick:toPart2}));
+    const pk=el('label',{class:'dim lab-key'},el('input',{type:'checkbox',id:'labKey'}),' with answer key');
+    r.append(el('div',{class:'dmeta'},el('span',{text:'PACKET TRACER LAB · 11.7.5 SUBNETTING SCENARIO'}),
+        el('span',{class:'row'},el('button',{class:'btn small',type:'button',text:'✎ Your own lab',onclick:own}),el('button',{class:'btn small',type:'button',text:'🖨 Print',onclick:()=>print($('#labKey').checked)}),pk,el('button',{class:'btn small ghost',type:'button',text:'New lab',onclick:()=>load(null)}))),
+      el('div',{class:'own',id:'labOwn',hidden:true}),seg,
+      el('div',{class:'lab-prompt',html:q.prompt}),
+      el('div',{class:'lab-grid'},el('div',{id:'labQ',class:'lab-q'}),el('div',{id:'labSheet'})));
+    renderQ();
+  }
+  return {start,load,get q(){return q;},get k(){return k;},check};
+})();
+
 /* ---------------- start: ?tab=… or ?task=…(&lab=…&hosts=…&r1=…&r2=…) ---------------- */
 function labParams(sp){
   const lab=sp.get('lab'),hosts=sp.get('hosts'),r1=sp.get('r1'),r2=sp.get('r2');if(!lab)return undefined;
@@ -253,7 +352,8 @@ renderStats();
 (()=>{let sp;try{sp=new URLSearchParams(location.search);}catch(e){sp=new URLSearchParams('');}
   const task=sp.get('task'),tab=sp.get('tab');
   if(task&&CS.TASKS.some(x=>x.id===task))go('tasks',{id:task,params:task==='scenario'?labParams(sp):undefined});
-  else go(['drills','tasks','sandbox','cheat'].includes(tab)?tab:'drills');})();
+  else if(sp.has('lab')&&!task){const p=labParams(sp);go('lab',p?{lab:{kind:'lab',base:p.lab,hosts:p.hosts,r1:p.r1,r2:p.r2}}:undefined);}
+  else go(['drills','tasks','lab','sandbox','cheat'].includes(tab)?tab:'drills');})();
 
 /* ---------------- background code rain (decorative; pauses when hidden, still frame for reduced motion) ---------------- */
 (function(){
@@ -270,5 +370,5 @@ renderStats();
   start();
 })();
 
-window.NS={go,Tasks,Drills,S,IOS,CS};
+window.NS={go,Tasks,Drills,Lab,S,IOS,CS,LAB};
 })();
