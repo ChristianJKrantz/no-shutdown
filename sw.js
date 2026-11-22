@@ -1,10 +1,10 @@
 /* No Shutdown service worker: keeps a copy of the site on the device so it works offline.
    Pages are network-first and skip the browser's HTTP cache (you always get the newest version when online, the saved copy when not).
    Fonts and icons are cache-first since they never change. Only this site's own files are ever handled or cached. */
-const CACHE = 'no-shutdown-v6';
+const CACHE = 'no-shutdown-v7';
 const FONTS = ['inter-latin-400', 'inter-latin-500', 'inter-latin-600', 'inter-latin-700', 'inter-latin-800',
   'jetbrains-mono-latin-400', 'jetbrains-mono-latin-600', 'jetbrains-mono-latin-700'].map(f => `fonts/${f}-normal.woff2`);
-const CORE = ['./', 'index.html', 'ios.js', 'content.js', 'lab.js', 'nd.js', 'app.js', 'manifest.webmanifest?v=1', 'icon.svg?v=1', 'icon-192.png?v=1', 'icon-512.png?v=1', 'apple-touch-icon.png?v=1', ...FONTS];
+const CORE = ['./', 'index.html', 'ios.js', 'content.js', 'lab.js', 'nd.js', 'app.js', 'manifest.webmanifest?v=2', 'icon.svg?v=2', 'icon-192.png?v=2', 'icon-512.png?v=2', 'icon-maskable-512.png?v=2', 'apple-touch-icon.png?v=2', ...FONTS];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));

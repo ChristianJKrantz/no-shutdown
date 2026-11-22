@@ -605,20 +605,5 @@ renderStats();
   else if(sp.has('lab')&&!task){const p=labParams(sp);go('lab',p?{lab:{kind:'lab',base:p.lab,hosts:p.hosts,r1:p.r1,r2:p.r2}}:undefined);}
   else go(['drills','tasks','lab','sandbox','cheat'].includes(tab)?tab:'drills');})();
 
-/* ---------------- background code rain (decorative; pauses when hidden, still frame for reduced motion) ---------------- */
-(function(){
-  const cv=document.getElementById('rain');if(!cv||!cv.getContext)return;
-  const ctx=cv.getContext('2d'),glyphs='01アイウエオカキクケコサシスセソタチツテト#>$0123456789ABCDEF./';
-  let cols=[],fs=16,w=0,h=0,last=0,raf=0;const reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)');
-  function size(){const d=Math.min(window.devicePixelRatio||1,2);w=innerWidth;h=innerHeight;cv.width=w*d;cv.height=h*d;ctx.setTransform(d,0,0,d,0,0);fs=w<600?14:16;cols=Array.from({length:Math.ceil(w/fs)},()=>Math.random()*-h/fs);ctx.fillStyle='#010804';ctx.fillRect(0,0,w,h);}
-  function frame(t){raf=requestAnimationFrame(frame);if(t-last<60)return;last=t;ctx.fillStyle='rgba(1,8,4,0.12)';ctx.fillRect(0,0,w,h);ctx.font=fs+'px "JetBrains Mono",monospace';
-    for(let i=0;i<cols.length;i++){const y=cols[i]*fs;if(y>0){ctx.fillStyle='#b8ffd0';ctx.fillText(glyphs[(Math.random()*glyphs.length)|0],i*fs,y);ctx.fillStyle='#00ff66';ctx.fillText(glyphs[(Math.random()*glyphs.length)|0],i*fs,y-fs);}cols[i]+=1;if(y>h&&Math.random()>.975)cols[i]=Math.random()*-20;}}
-  function still(){size();ctx.font=fs+'px "JetBrains Mono",monospace';for(let i=0;i<cols.length;i++){const n=(Math.random()*h/fs)|0;for(let k=0;k<n;k++){ctx.fillStyle=`rgba(0,255,102,${(k/n)*.5})`;ctx.fillText(glyphs[(Math.random()*glyphs.length)|0],i*fs,k*fs);}}}
-  function start(){cancelAnimationFrame(raf);if(reduce&&reduce.matches){still();return;}size();raf=requestAnimationFrame(frame);}
-  addEventListener('resize',()=>{clearTimeout(start.t);start.t=setTimeout(start,200);});
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelAnimationFrame(raf);else start();});
-  start();
-})();
-
 window.NS={go,Tasks,Drills,Lab,NDLab,S,IOS,CS,LAB,ND};
 })();

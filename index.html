@@ -7,16 +7,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>No Shutdown — Cisco IOS Command Practice</title>
 <meta name="description" content="Practice Cisco IOS commands in a simulated router and switch: modes, basic setup, passwords, interfaces, SSH, saving and resetting, with feedback on every mistake.">
-<link rel="apple-touch-icon" href="apple-touch-icon.png?v=1">
-<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png?v=1">
-<link rel="icon" href="icon-192.png?v=1" sizes="192x192" type="image/png">
-<link rel="icon" href="icon.svg?v=1" type="image/svg+xml">
-<link rel="manifest" href="manifest.webmanifest?v=1">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png?v=2">
+<link rel="icon" href="icon-192.png?v=2" sizes="192x192" type="image/png">
+<link rel="icon" href="icon.svg?v=2" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest?v=2">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="No Shutdown">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#010804">
+<meta name="theme-color" content="#eeeae1">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://christianjkrantz.github.io/no-shutdown/">
 <meta property="og:title" content="No Shutdown: Cisco IOS command practice">
@@ -241,15 +241,32 @@ footer{margin:26px 0 10px;color:var(--muted);font-size:13px;text-align:center}
 .dbox:focus-within{border-color:var(--accent)}
 @media(max-width:600px){.drill-picker select{flex:1;min-width:0}.dacts .btn,.tabs button{min-height:44px}.drill .dbox{border-left:3px solid var(--accent);border-radius:4px}}
 @media(max-width:600px){.tabs{flex-wrap:wrap;overflow:visible;gap:4px}.tabs button{flex:1 0 auto;text-align:center}}
+@media screen {
+:root{--bg:#132722;--panel:#1d342d;--panel2:#263f36;--line:#466253;--text:#f0f3e7;--muted:#b6c7b6;--accent:#c2f65b}
+html,body{background:#eeeae1}body::after,#rain{display:none}
+.app{max-width:1180px;padding:clamp(12px,2.4vw,32px)}
+.app>header{align-items:center;background:#efece2;color:#192d25;padding:12px 0 18px;border-bottom:2px solid #21372e;gap:16px}
+h1{font:800 clamp(32px,4.6vw,62px)/1 Inter,system-ui,sans-serif;letter-spacing:-.065em;text-shadow:none;gap:10px}
+h1 .cur,h1 .cur span{color:#19372a;text-shadow:none}h1 .cur::after{display:none}.brand-mark{width:1em;height:1em;border-radius:.17em}
+header .sub{font:500 15px/1.4 Inter,system-ui,sans-serif;color:#43574b;margin-top:8px}
+header .row{gap:10px}header .sister{color:#294b35;background:transparent;border-color:#9cae9d}header .stat{background:transparent;color:#142b20;border:0;border-radius:0;border-left:1px solid #abb5a6;min-width:0;padding:4px 12px}header .stat small{color:#4b6051}
+.tabs{gap:4px;margin:12px 0}.tabs .tab{border:1px solid #b1bcad;color:#304734;background:#f6f4ec;border-radius:6px;line-height:1.2}.tabs .tab.on{color:#f7faed;background:#203e2e;border-color:#203e2e;box-shadow:none}
+.app>main{color:var(--text)}.app>main>.card,.app>main>#v-tasks{background:#1b3028;border:1px solid #314f40;border-radius:14px;box-shadow:0 10px 24px #20342419}.app>main>#v-tasks{padding:16px}
+#v-drills{max-width:none;padding:clamp(18px,3.5vw,44px)}.drill .dmeta{color:#c5d9bb}.drill-picker{padding-bottom:14px;border-bottom:1px solid #45604e}
+.dpurpose{font-size:clamp(23px,3vw,38px);letter-spacing:-.04em;line-height:1.16;max-width:30ch;margin:18px 0}.dbox{background:#102219;border:1px solid #76936e;border-left:4px solid var(--accent);border-radius:6px;min-height:58px}.dbox .tp{color:var(--accent)}.dbox input{color:#fcfff3}
+.dacts .btn,.btn.primary{box-shadow:none;border-radius:6px}.btn.primary{background:var(--accent);color:#18281a;border-color:var(--accent)}
+.app>footer{color:#405446}.app>footer a{color:#21482f}.term{border-radius:6px}
+@media(min-width:820px){#v-drills{display:grid;grid-template-columns:minmax(0,1fr) minmax(200px,28%);column-gap:36px}#v-drills[hidden]{display:none}#v-drills>*{grid-column:1}.drill .drill-picker{grid-column:2;grid-row:1/4;display:flex;flex-direction:column;align-items:stretch;align-self:start;margin:0;padding:16px;background:#294237;border:1px solid #496554;border-radius:8px}.drill .dpurpose{grid-row:2}}
+@media(max-width:600px){header .row{width:100%;justify-content:space-between}.app>header{padding-top:6px;margin-bottom:8px}.tabs{margin:8px 0}.drill .dpurpose{margin:14px 0}.drill .drill-picker{margin:8px 0}.drill .dbox{gap:5px}.app>main>#v-tasks{padding:10px}}
+}
 </style>
 </head>
 <body>
-<canvas id="rain" aria-hidden="true"></canvas>
 <div class="app">
   <header>
     <div>
-      <h1><span class="cur">No&nbsp;<span>Shutdown</span></span><button class="install" id="installBtn" hidden><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></span>Install app</button></h1>
-      <div class="sub">Cisco IOS command practice: modes, setup, passwords, interfaces, SSH, saving &amp; resetting</div>
+      <h1><img class="brand-mark" src="icon.svg?v=2" alt=""><span class="cur">No&nbsp;<span>Shutdown</span></span><button class="install" id="installBtn" hidden><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></span>Install app</button></h1>
+      <div class="sub">Practice Cisco IOS commands on simulated routers and switches.</div>
     </div>
     <div class="row">
       <a class="sister" href="https://christianjkrantz.github.io/subnet-sprint/" target="_blank" rel="noopener">↔ Subnet Sprint</a>
@@ -261,11 +278,11 @@ footer{margin:26px 0 10px;color:var(--muted);font-size:13px;text-align:center}
     </div>
   </header>
   <nav class="tabs" id="tabs" aria-label="Sections">
-    <button class="tab" data-v="drills">Drills</button>
-    <button class="tab" data-v="tasks">Tasks</button>
-    <button class="tab" data-v="lab">Packet Tracer lab</button>
-    <button class="tab" data-v="sandbox">Sandbox</button>
-    <button class="tab" data-v="cheat">Cheat sheet</button>
+    <button class="tab" data-v="drills"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M4 6l6 6-6 6m9 0h7"/></svg>Drills</button>
+    <button class="tab" data-v="tasks"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M5 5h14v14H5z M8 10l2 2 4-5"/></svg>Tasks</button>
+    <button class="tab" data-v="lab"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M4 4h6v6H4z M14 14h6v6h-6z M7 10v7h7"/></svg>Packet Tracer lab</button>
+    <button class="tab" data-v="sandbox"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M4 7l8-4 8 4-8 4z M4 7v10l8 4 8-4V7 M12 11v10"/></svg>Sandbox</button>
+    <button class="tab" data-v="cheat"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M3 5q5-2 9 1 4-3 9-1v14q-5-2-9 0-4-2-9 0z M12 6v13"/></svg>Cheat sheet</button>
   </nav>
   <main>
     <section id="v-drills" class="card drill" hidden></section>
