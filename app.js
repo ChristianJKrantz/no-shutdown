@@ -58,7 +58,10 @@ function Terminal(dev,net,onRun){
   }
   inp.addEventListener('keydown',e=>{
     if(e.key==='Enter'){e.preventDefault();submit(inp.value);}
-    else if(e.key==='Tab'){e.preventDefault();key('tab');}
+    else if(e.key==='Tab'&&!e.shiftKey&&!pending()){
+      const completed=IOS.complete(mode(),inp.value,IOS.activeDev(dev));
+      if(completed!==inp.value){e.preventDefault();inp.value=completed;}
+    }
     else if(e.key==='?'&&!pending()){e.preventDefault();key('help');}
     else if(e.key==='ArrowUp'){e.preventDefault();key('up');}
     else if(e.key==='ArrowDown'){e.preventDefault();key('down');}
@@ -124,7 +127,7 @@ const Drills=(()=>{
     root.append(el('div',{class:'dmeta'},el('span',{text:`${dr.g} · ${dr.dev==='pc'?'PC':dr.dev==='router'?'router':'switch'}`}),el('span',{text:`Streak ${S.drill.streak} · best ${S.drill.best}`})),chips,
       el('div',{class:'dpurpose',id:'dq',text:txt(dr.purpose,v)}),
       el('div',{class:'dbox'},el('span',{class:'tp',text:IOS.prompt(dev)}),inp),fb,el('div',{class:'dacts'},check,showB,skip),
-      el('p',{class:'dim',style:'font-size:13px;margin-top:14px',text:'Any abbreviation IOS would accept counts (conf t, int g0/0, no shut…). Tab completes a word and ? lists what can come next.'}));
+      el('p',{class:'dim',style:'font-size:13px;margin-top:14px',text:'Any abbreviation IOS would accept counts (conf t, int g0/0, no shut…). Tab completes a partial command. When there is nothing to complete, Tab moves to the next control.'}));
     const answer=()=>{
       const t=inp.value;if(!t.trim()){fb.textContent='Type the command first.';return;}
       if(fb.dataset.done){nextItem();return;}
@@ -135,7 +138,7 @@ const Drills=(()=>{
         S.drill.tried+=missedNow||shown?0:1;store.set('ns_drill',S.drill);renderStats();
         const full=txt(dr.answer,v),sh=txt(dr.short,v);
         add(fb,el('div',{class:'ok',text:'✓ Correct'}),el('div',{class:'ans',text:full}),sh&&sh!==t.trim()&&sh!==full?el('div',{class:'dim',text:`Shortcut: ${sh}`}):null,dr.note?el('div',{class:'dim',text:dr.note}):null);
-        fb.dataset.done='1';check.textContent='Next';inp.readOnly=true;check.focus();return;}
+        fb.dataset.done='1';showB.disabled=true;check.textContent='Next';inp.readOnly=true;check.focus();return;}
       if(!missedNow&&!shown){missedNow=true;S.drill.tried++;S.drill.streak=0;store.set('ns_drill',S.drill);renderStats();queue.splice(Math.min(3,queue.length),0,cur.i);}
       if(r.ok){const what=CS.IDNAME[r.id];fb.append(el('div',{class:'out',text:dr.ids.includes(r.id)?'Right command, but check the value'+(r.args.length>1?'s':'')+'.':`That’s a real command, but it would ${what||'do something else'}.`}));}
       else{const scratch=IOS.newDevice(dr.dev==='pc'?'pc':dr.dev,dev.name);if(scratch.type!=='pc'){scratch.mode=dev.mode;scratch.ctx=dev.ctx;}
@@ -146,7 +149,7 @@ const Drills=(()=>{
         fb.append(pre);}
       inp.select();
     };
-    check.onclick=answer;inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();answer();}else if(e.key==='Tab'){e.preventDefault();inp.value=IOS.complete(dr.mode==='pc'?'pc':dr.mode,inp.value,dev);}});
+    check.onclick=answer;inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();answer();}else if(e.key==='Tab'&&!e.shiftKey&&!inp.readOnly){const completed=IOS.complete(dr.mode==='pc'?'pc':dr.mode,inp.value,dev);if(completed!==inp.value){e.preventDefault();inp.value=completed;}}});
     check.addEventListener('keydown',e=>{if(e.key==='Enter'&&fb.dataset.done){e.preventDefault();nextItem();}});
     // first a hint: the command's shape with the values as <placeholders> (the values that change between drills),
     // then the full answer. Either one means the drill comes back later and scores nothing now.
