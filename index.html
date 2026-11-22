@@ -259,6 +259,11 @@ header .row{gap:10px}header .sister{color:#294b35;background:transparent;border-
 @media(min-width:820px){#v-drills{display:grid;grid-template-columns:minmax(0,1fr) minmax(200px,28%);column-gap:36px}#v-drills[hidden]{display:none}#v-drills>*{grid-column:1}#v-drills>.drill-picker{grid-column:2;grid-row:1/4;display:flex;flex-direction:column;align-items:stretch;align-self:start;margin:0;padding:16px;background:#294237;border:1px solid #496554;border-radius:8px}.drill .dpurpose{grid-row:2}}
 @media(max-width:600px){header .row{width:100%;justify-content:space-between}.app>header{padding-top:6px;margin-bottom:8px}.tabs{margin:8px 0}.drill .dpurpose{margin:14px 0}.drill .drill-picker{margin:8px 0}.drill .dbox{gap:5px}.app>main>#v-tasks{padding:10px}}
 }
+@media screen{
+  .tin{flex-wrap:wrap}
+  .tin .tp{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+  .tin input{flex:1 1 12ch;min-width:min(12ch,100%)}
+}
 </style>
 </head>
 <body>
