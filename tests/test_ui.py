@@ -63,7 +63,7 @@ with sync_playwright() as pw:
 
     # ---------- drills ----------
     ok('opens on Drills', pg.is_visible('#v-drills') and pg.is_visible('#dq'))
-    pg.click('.chip:has-text("Interfaces")'); ok('topic chip filters the drills', 'Interfaces' in pg.text_content('.dmeta'))
+    pg.select_option('#drillTopic','Interfaces'); ok('topic picker filters the drills', 'Interfaces' in pg.text_content('.dmeta'))
     pg.fill('#din', 'hostnme X'); pg.press('#din', 'Enter')
     ok('a wrong command shows the IOS error', 'Invalid input' in pg.text_content('#dfb'))
     ok('a miss resets the streak and counts in accuracy', pg.text_content('#sAcc') == '0%' and pg.text_content('#sStreak') == '0')
@@ -83,7 +83,7 @@ with sync_playwright() as pw:
     ok('shortcuts IOS would accept are marked right (6/6)', right == 6, right)
     ok('streak counts them', pg.text_content('#sStreak') == '6')
     ok('drill stats are saved', json.loads(pg.evaluate("localStorage.getItem('ns_drill')"))['streak'] == 6)
-    pg.click('.chip:has-text("All")')
+    pg.select_option('#drillTopic','All')
     pg.fill('#din', 'int'); pg.press('#din', 'Tab')
     want = pg.evaluate("(()=>{const c=NS.Drills.cur;return NS.IOS.complete(c.dr.mode==='pc'?'pc':c.dr.mode,'int',c.dev);})()")
     ok('Tab completes in drills (same as the terminal)', pg.input_value('#din') == want)

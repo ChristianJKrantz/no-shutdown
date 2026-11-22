@@ -107,11 +107,26 @@ $$('#tabs .tab').forEach(b=>b.onclick=()=>{try{history.replaceState(null,'',loca
 /* ---------------- drills ---------------- */
 const Drills=(()=>{
   let group='All',queue=[],cur=null,missedNow=false,shown=false;
-  const groups=['All',...new Set(CS.DRILLS.map(d=>d.g))];
+  const reviewGroup='Missed commands';
+  const saved=store.get('ns_command_review',[]);
+  const missed=new Set(Array.isArray(saved)?saved.filter(k=>typeof k==='string'):[]);
+  const commandKey=d=>[d.g,d.dev,d.mode,d.ids.join(','),String(d.purpose)].join('|');
+  function remember(d,needsReview){
+    const key=commandKey(d);
+    if(needsReview)missed.add(key);else missed.delete(key);
+    store.set('ns_command_review',[...missed]);
+  }
+  const groups=['All',reviewGroup,...new Set(CS.DRILLS.map(d=>d.g))];
   const root=$('#v-drills');
-  function fill(){const pool=CS.DRILLS.map((d,i)=>i).filter(i=>group==='All'||CS.DRILLS[i].g===group);queue=queue.concat(shuffle(pool));}
+  function fill(){const pool=CS.DRILLS.map((d,i)=>i).filter(i=>group==='All'||(group===reviewGroup?missed.has(commandKey(CS.DRILLS[i])):CS.DRILLS[i].g===group));queue=queue.concat(shuffle(pool));}
   function nextItem(){
-    if(!queue.length)fill();const i=queue.shift(),dr=CS.DRILLS[i],v=dr.gen?dr.gen():{};
+    if(group===reviewGroup)queue=queue.filter(i=>missed.has(commandKey(CS.DRILLS[i])));
+    if(!queue.length)fill();
+    if(!queue.length){
+      root.replaceChildren(el('h2',{text:'Missed commands'}),el('p',{text:'Your review queue is clear. Commands you miss in Drills will appear here.'}),el('button',{type:'button',class:'btn primary',text:'Back to all commands',onclick:()=>{group='All';nextItem();}}));
+      cur=null;return;
+    }
+    const i=queue.shift(),dr=CS.DRILLS[i],v=dr.gen?dr.gen():{};
     const dev=IOS.newDevice(dr.dev,dr.dev==='router'?pickName('R'):dr.dev==='switch'?pickName('S'):'PC1');
     if(dr.dev!=='pc'){dev.mode=dr.mode;dev.ctx=dr.ctx||null;if(dr.mode==='line')dev.vtyRange=[0,dev.vtyMax];}
     cur={i,dr,v,dev};missedNow=false;shown=false;render();
@@ -120,7 +135,10 @@ const Drills=(()=>{
   const txt=(x,v)=>typeof x==='function'?x(v):x;
   function render(){
     const {dr,v,dev}=cur;root.textContent='';
-    const chips=el('div',{class:'groups',role:'group','aria-label':'Topics'},...groups.map(g=>el('button',{class:'chip'+(g===group?' on':''),type:'button',text:g,onclick:()=>{group=g;queue=[];nextItem();}})));
+    const picker=el('select',{id:'drillTopic',onchange:e=>{group=e.target.value;queue=[];nextItem();}},...groups.map(g=>el('option',{value:g,text:g===reviewGroup?g+' ('+missed.size+')':g})));
+    picker.value=group;
+    const chips=el('div',{class:'drill-picker'},el('label',{for:'drillTopic',text:'Practice topic'}),picker);
+    const updateReviewCount=()=>{picker.options[groups.indexOf(reviewGroup)].textContent=reviewGroup+' ('+missed.size+')';};
     const inp=el('input',{id:'din',autocomplete:'off',autocapitalize:'off',autocorrect:'off',spellcheck:'false','aria-label':'Your command',enterkeyhint:'go',placeholder:'type the command'});
     const fb=el('div',{class:'dfb',id:'dfb','aria-live':'polite'});
     const check=el('button',{class:'btn primary',type:'button',text:'Check'}),showB=el('button',{class:'btn',type:'button',text:'Hint'}),skip=el('button',{class:'btn ghost',type:'button',text:'Skip'});
@@ -134,12 +152,12 @@ const Drills=(()=>{
       const r=IOS.parse(dr.mode==='pc'?'pc':dr.mode,t,dev);fb.textContent='';
       const right=r.ok&&dr.ids.includes(r.id)&&(!dr.check||dr.check(r.args,v));
       if(right){
-        if(!missedNow&&!shown){S.drill.right++;S.drill.streak++;S.drill.best=Math.max(S.drill.best,S.drill.streak);}
+        if(!missedNow&&!shown){remember(dr,false);updateReviewCount();S.drill.right++;S.drill.streak++;S.drill.best=Math.max(S.drill.best,S.drill.streak);}
         S.drill.tried+=missedNow||shown?0:1;store.set('ns_drill',S.drill);renderStats();
         const full=txt(dr.answer,v),sh=txt(dr.short,v);
         add(fb,el('div',{class:'ok',text:'✓ Correct'}),el('div',{class:'ans',text:full}),sh&&sh!==t.trim()&&sh!==full?el('div',{class:'dim',text:`Shortcut: ${sh}`}):null,dr.note?el('div',{class:'dim',text:dr.note}):null);
         fb.dataset.done='1';showB.disabled=true;check.textContent='Next';inp.readOnly=true;check.focus();return;}
-      if(!missedNow&&!shown){missedNow=true;S.drill.tried++;S.drill.streak=0;store.set('ns_drill',S.drill);renderStats();queue.splice(Math.min(3,queue.length),0,cur.i);}
+      if(!missedNow&&!shown){remember(dr,true);updateReviewCount();missedNow=true;S.drill.tried++;S.drill.streak=0;store.set('ns_drill',S.drill);renderStats();queue.splice(Math.min(3,queue.length),0,cur.i);}
       if(r.ok){const what=CS.IDNAME[r.id];fb.append(el('div',{class:'out',text:dr.ids.includes(r.id)?'Right command, but check the value'+(r.args.length>1?'s':'')+'.':`That’s a real command, but it would ${what||'do something else'}.`}));}
       else{const scratch=IOS.newDevice(dr.dev==='pc'?'pc':dr.dev,dev.name);if(scratch.type!=='pc'){scratch.mode=dev.mode;scratch.ctx=dev.ctx;}
         const o=IOS.run(scratch,t);const pre=el('div',{class:'out'});
@@ -158,9 +176,9 @@ const Drills=(()=>{
       const out=a.map((tok,i)=>others.some(o=>o[i]!==tok)?(/^\d+\.\d+\.\d+\.\d+$/.test(tok)?(/^255\./.test(tok)?'<mask>':'<address>'):/^flash:/.test(tok)?'flash:<file name>':/:.*\//.test(tok)?'<IPv6 address>/<prefix>':'<value>'):tok).join(' ');return out===a.join(' ')?null:out;};
     let hinted=false;
     showB.onclick=()=>{if(!hinted&&!shown){const sp=shape();hinted=true;showB.textContent='Show answer';
-        if(sp){if(!missedNow){missedNow=true;S.drill.tried++;S.drill.streak=0;store.set('ns_drill',S.drill);renderStats();queue.splice(Math.min(3,queue.length),0,cur.i);}
+        if(sp){if(!missedNow){remember(dr,true);updateReviewCount();missedNow=true;S.drill.tried++;S.drill.streak=0;store.set('ns_drill',S.drill);renderStats();queue.splice(Math.min(3,queue.length),0,cur.i);}
           fb.textContent='';add(fb,el('div',{class:'out',text:'The command looks like this. The values come from the task above.'}),el('div',{class:'ans',text:sp}));inp.focus();return;}}
-      if(!shown&&!missedNow){S.drill.tried++;S.drill.streak=0;store.set('ns_drill',S.drill);renderStats();queue.splice(Math.min(3,queue.length),0,cur.i);}shown=true;
+      if(!shown&&!missedNow){remember(dr,true);updateReviewCount();S.drill.tried++;S.drill.streak=0;store.set('ns_drill',S.drill);renderStats();queue.splice(Math.min(3,queue.length),0,cur.i);}shown=true;
       fb.textContent='';const sh=txt(dr.short,v);add(fb,el('div',{class:'ans',text:txt(dr.answer,v)}),sh?el('div',{class:'dim',text:`Shortcut: ${sh}`}):null,dr.note?el('div',{class:'dim',text:dr.note}):null,el('div',{class:'dim',text:'Type it in to move on.'}));inp.focus();};
     skip.onclick=nextItem;
     if(isDesktop())inp.focus({preventScroll:true});

@@ -236,6 +236,10 @@ footer{margin:26px 0 10px;color:var(--muted);font-size:13px;text-align:center}
   .pp-line{display:inline-block;width:90pt;border-bottom:.75pt solid #000}.pp-line.short{width:40pt}
   .pp .topo{max-width:360px;margin:2pt 0}.pp .topo .tl,.pp .topo .tl.wan{stroke:#000;stroke-opacity:1}.pp .topo .trt,.pp .topo .tsw,.pp .topo .tpc{fill:#fff;stroke:#000}.pp .topo .tn,.pp .topo .tt{fill:#000}
 }
+.drill-picker{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0 18px;font:600 14px var(--mono)}
+.drill-picker select{background:#06190e;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:8px 12px;min-height:44px;font:inherit;max-width:100%}
+.dbox:focus-within{border-color:var(--accent)}
+@media(max-width:600px){.drill-picker select{flex:1;min-width:0}.dacts .btn,.tabs button{min-height:44px}.drill .dbox{border-left:3px solid var(--accent);border-radius:4px}}
 </style>
 </head>
 <body>
