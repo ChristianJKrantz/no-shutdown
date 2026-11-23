@@ -118,7 +118,7 @@ with sync_playwright() as pw:
     except ImportError: print('  (PyMuPDF not installed: skipped the PDF check)')
     print('11.9.3 VLSM Design')
     pg.goto(URL+'?vlsm=192.168.72.0&hosts=50,25,12,6'); pg.wait_for_timeout(300)
-    ok(pg.evaluate("NS.Lab.kind")=='vlsm' and pg.locator('.labkind .chip.on').inner_text()=='11.9.3 VLSM Design','a ?vlsm= link opens the 11.9.3 lab')
+    ok(pg.evaluate("NS.Lab.kind")=='vlsm' and pg.locator('.lab-title').inner_text()=='11.9.3 VLSM Design','a ?vlsm= link opens the 11.9.3 lab')
     V=dict(zip(labels(pg),answers(pg)))
     ok(V['How many subnets are needed in the network topology?']=='5','5 subnets: 4 LANs and the R1–R2 link')
     ok([V[k] for k in labels(pg) if k.startswith('Which subnet mask will accommodate the')][:4]==['255.255.255.192','255.255.255.224','255.255.255.240','255.255.255.248'],'LAN masks: 50 → /26, 25 → /27, 12 → /28, 6 → /29')
@@ -171,7 +171,7 @@ with sync_playwright() as pw:
     ok('VLSM Design and Implementation' in pg.evaluate("window.__vp") and 'Subnet Table' in pg.evaluate("window.__vp"),'the 11.9.3 printout has its own title and subnet table')
     if not pg.locator('.lab-settings').evaluate("d=>d.open"): pg.click('.lab-settings > summary')
     pg.click('.labkind .chip:has-text("11.7.5")'); pg.wait_for_timeout(100)
-    ok(pg.evaluate("NS.Lab.kind")=='lab' and pg.locator('.labkind .chip.on').inner_text().startswith('11.7.5'),'the lab picker switches back to 11.7.5')
+    ok(pg.evaluate("NS.Lab.kind")=='lab' and pg.locator('.lab-title').inner_text().startswith('11.7.5'),'the lab picker switches back to 11.7.5')
     p3=b.new_page(); e3=[]; p3.on('pageerror',lambda e:e3.append(str(e)))
     for q in ['?vlsm=192.168.1.0&hosts=999,1,1,1','?vlsm=%3Cimg%3E&hosts=x','?task=vlsm-scenario&vlsm=1.2.3.4&hosts=1']:
         p3.goto(URL+q); p3.wait_for_timeout(200)
