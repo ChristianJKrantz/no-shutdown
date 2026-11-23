@@ -1,4 +1,10 @@
+<img align="right" src="icon-192.png" alt="" width="64" height="64">
+
 # No Shutdown
+
+## About
+
+Practice Cisco IOS commands in a forest-green console. In **Drills → Practice topic → Missed commands**, a correct first try clears the command from your saved review queue. In **Packet Tracer lab**, use **Change lab** for lab and part selection. Expand **Scenario and topology** or **Addressing tables** when you need them. Printing and customization are under **Print, customize or start over**.
 
 **Practice Cisco IOS commands on a simulated router and switch, in your browser.**
 
@@ -6,13 +12,12 @@ Type real commands at a router, switch or PC prompt and get IOS's own error mess
 
 ### ▶ [Try it here](https://christianjkrantz.github.io/no-shutdown/)
 
-Sister site: **[Subnet Sprint](https://christianjkrantz.github.io/subnet-sprint/)** for subnetting and IPv4 addressing practice.
 
 It's built to teach, not to hand out answers. Help comes in steps, from a nudge to the full answer, and the answer is the last step. Every lab and task gets new addresses each time, so its answers won't match anyone else's or the handout's answer key.
 
 Works in any modern browser on desktop, tablet or phone. No install, no account, no tracking. You can also install it as an app, and it works offline after the first visit.
 
-![A task in progress: the goal checklist on the left and the router console on the right, with a typo caught by the ^ marker and “line ?” listing the line types](docs/task.png)
+![Basic router setup with a goal checklist and command feedback](docs/task.png)
 
 ---
 
@@ -28,7 +33,7 @@ One job at a time: the drill names a task ("Give this interface the address 192.
 - **Hint** first shows the command's shape with the values left as placeholders (`ip address <address> <mask>`); only then does it become **Show answer**. Either one ends the streak, scores nothing, and brings the drill back a few questions later.
 - Streak, best streak and accuracy are saved in your browser.
 
-![A drill: a /24 typed instead of a dotted mask, with the IOS error and a note](docs/drills.png)
+![Feedback on a mistyped command in the command console](docs/drills.png)
 
 ### Tasks
 Thirteen multi-step configurations, each with a checklist of goals that tick off as you meet them. The goals check the device's actual state, so any order and any valid spelling works.
@@ -95,11 +100,11 @@ https://christianjkrantz.github.io/no-shutdown/?vlsm=192.168.72.0&hosts=50,25,12
 https://christianjkrantz.github.io/no-shutdown/?task=vlsm-scenario&vlsm=192.168.72.0&hosts=50,25,12,6 11.9.3, Part 3
 ```
 
-For 11.7.5, `lab` is the /24 network, `hosts` the addresses each LAN needs, and `r1`/`r2` how many LANs each router has. For 11.9.3, `vlsm` is the /24 and `hosts` the four LANs' host counts in order (R1 G0/0, R1 G0/1, R2 G0/0, R2 G0/1). For 11.5.5, `subnet` is the /24, `hosts` the two LANs' host counts and `spare` the extra subnets (`?subnet=192.168.0.0&hosts=50,40&spare=2`, and `?task=subnet-ipv4&…` for Part 2). `?lab=nd` opens 9.3.4. `?task=connect-router` opens 10.3.4 on new addresses, and the link it then shows (`&a=…&b=…&c=…&w=…`) reopens those same addresses. Values that don't make a valid lab are ignored and you get a random one. Old Packet Tracer lab links from Subnet Sprint forward here.
+For 11.7.5, `lab` is the /24 network, `hosts` the addresses each LAN needs, and `r1`/`r2` how many LANs each router has. For 11.9.3, `vlsm` is the /24 and `hosts` the four LANs' host counts in order (R1 G0/0, R1 G0/1, R2 G0/0, R2 G0/1). For 11.5.5, `subnet` is the /24, `hosts` the two LANs' host counts and `spare` the extra subnets (`?subnet=192.168.0.0&hosts=50,40&spare=2`, and `?task=subnet-ipv4&…` for Part 2). `?lab=nd` opens 9.3.4. `?task=connect-router` opens 10.3.4 on new addresses, and the link it then shows (`&a=…&b=…&c=…&w=…`) reopens those same addresses. Values that don't make a valid lab are ignored and you get a random one.
 
-![The Packet Tracer lab partway through Step 3: the topology, a question with feedback about the wrong subnet, and the Addressing Table filling in](docs/lab.png)
+![The current Packet Tracer question and its reference controls](docs/lab.png)
 
-![The Neighbor Discovery lab after a ping to the other LAN: the event list, and PCB1's echo reply still missing its destination MAC](docs/nd.png)
+![IPv6 Neighbor Discovery simulator](docs/nd.png)
 
 ![The Subnetting Scenario task: R1, S3 and PC4 tabs, with the addressing table under the console](docs/scenario.png)
 
@@ -119,7 +124,7 @@ A factory-fresh router, switch and PC cabled together, with no goals and no scor
 ### Cheat sheet
 The commands from the drills and tasks in one page, grouped by topic, with the prompt each one is typed at.
 
-<p align="center"><img src="docs/phone.png" width="300" alt="The Switch management task on a phone, with helper keys under the console"></p>
+<p align="center"><img src="docs/phone.png" width="300" alt="Basic router setup with phone console controls"></p>
 
 ---
 

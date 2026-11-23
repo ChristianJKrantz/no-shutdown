@@ -570,16 +570,19 @@ const Lab=(()=>{
     const r=root();r.textContent='';
     const which=el('div',{class:'groups labkind',role:'group','aria-label':'Which lab'},...Object.entries(KINDS).map(([kd,K])=>el('button',{class:'chip'+(kd===kind?' on':''),type:'button',text:K.name,'aria-pressed':String(kd===kind),
       onclick:()=>{if(kd===kind)return;setKind(kd);store.set('ns_labkind',kind);if(kd==='nd'){render();return;}load(null);}})));
-    if(kind==='nd'){r.append(which);try{const u=new URL(location.href);u.search='';u.searchParams.set('tab','lab');u.searchParams.set('lab','nd');history.replaceState(null,'',u.toString());}catch(e){}NDLab.render(r);return;}
+    const settings=el('details',{class:'lab-fold lab-settings'},el('summary',{text:'Change lab · '+KINDS[kind].name}),which);
+    if(kind==='nd'){r.append(settings);try{const u=new URL(location.href);u.search='';u.searchParams.set('tab','lab');u.searchParams.set('lab','nd');history.replaceState(null,'',u.toString());}catch(e){}NDLab.render(r);return;}
     const seg=el('div',{class:'groups',role:'group','aria-label':'Lab part'},...Object.entries(KINDS[kind].parts).map(([key,name])=>el('button',{class:'chip'+(key===part?' on':''),type:'button',text:name,'aria-pressed':String(key===part),
       onclick:()=>{part=key;parts[kind]=part;store.set('ns_labparts',parts);load(pr||fixedOf(q.L));}})),
       el('button',{class:'chip',type:'button',text:`${KINDS[kind].cfg}: configure →`,onclick:toPart2}));
     const pk=el('label',{class:'dim lab-key'},el('input',{type:'checkbox',id:'labKey'}),' with answer key');
-    r.append(which,el('div',{class:'dmeta'},el('span',{text:`PACKET TRACER LAB · ${KINDS[kind].name.toUpperCase()}`}),
-        el('span',{class:'row'},el('button',{class:'btn small',type:'button',onclick:own},ico('edit'),'Your own lab'),el('button',{class:'btn small',type:'button',onclick:()=>print($('#labKey').checked)},ico('print'),'Print'),pk,el('button',{class:'btn small ghost',type:'button',text:'New lab',onclick:()=>load(null)}))),
-      el('div',{class:'own',id:'labOwn',hidden:true}),seg,
-      el('div',{class:'lab-prompt',html:q.prompt}),
-      el('div',{class:'lab-grid'},el('div',{id:'labQ',class:'lab-q'}),el('div',{id:'labSheet'})));
+    settings.append(seg);
+    r.append(settings,el('details',{class:'lab-fold lab-tools'},el('summary',{text:'Print, customize or start over'}),
+        el('span',{class:'row'},el('button',{class:'btn small',type:'button',onclick:own},ico('edit'),'Your own lab'),el('button',{class:'btn small',type:'button',onclick:()=>print($('#labKey').checked)},ico('print'),'Print'),pk,el('button',{class:'btn small ghost',type:'button',text:'New lab',onclick:()=>load(null)})),
+      el('div',{class:'own',id:'labOwn',hidden:true})),
+      el('h2',{class:'lab-title',text:KINDS[kind].name}),
+      el('details',{class:'lab-fold lab-brief',open:isDesktop()},el('summary',{text:'Scenario and topology'}),el('div',{class:'lab-prompt',html:q.prompt})),
+      el('div',{class:'lab-grid'},el('div',{id:'labQ',class:'lab-q'}),el('details',{class:'lab-fold lab-tables',open:isDesktop()},el('summary',{text:'Addressing tables'}),el('div',{id:'labSheet'}))));
     renderQ();
   }
   return {start,load,get q(){return q;},get k(){return k;},get kind(){return kind;},check};
