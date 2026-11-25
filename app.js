@@ -95,18 +95,21 @@ function PCPanel(pc,net,onChange){
 let view=null;
 function go(v,arg){
   view=v;$$('#tabs .tab').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
-  ['drills','tasks','lab','sandbox','cheat'].forEach(k=>{$('#v-'+k).hidden=k!==v;});
+  ['path','drills','tasks','lab','sandbox','cheat'].forEach(k=>{$('#v-'+k).hidden=k!==v;});
+  document.body.classList.toggle('pl-focus',false);
+  if(v!=='drills'&&Drills.inSession)Drills.endSession();
+  if(v==='path')Path.map();
   if(v==='drills')Drills.start();
   if(v==='tasks'){if(arg)Tasks.open(arg.id,arg.params);else Tasks.list();}
   if(v==='lab')Lab.start(arg&&arg.lab);
   if(v==='sandbox')Sandbox.start();
   if(v==='cheat')Cheat.render();
 }
-$$('#tabs .tab').forEach(b=>b.onclick=()=>{try{history.replaceState(null,'',location.pathname+(b.dataset.v==='drills'?'':'?tab='+b.dataset.v));}catch(e){}go(b.dataset.v);});
+$$('#tabs .tab').forEach(b=>b.onclick=()=>{try{history.replaceState(null,'',location.pathname+(b.dataset.v==='path'?'':'?tab='+b.dataset.v));}catch(e){}store.set('ns_tab',b.dataset.v);if(b.dataset.v==='drills'&&Drills.inSession)Drills.endSession();go(b.dataset.v);});
 
 /* ---------------- drills ---------------- */
 const Drills=(()=>{
-  let group='All',queue=[],cur=null,missedNow=false,shown=false;
+  let group='All',queue=[],cur=null,missedNow=false,shown=false,sess=null;
   const reviewGroup='Missed commands';
   const saved=store.get('ns_command_review',[]);
   const missed=new Set(Array.isArray(saved)?saved.filter(k=>typeof k==='string'):[]);
@@ -115,11 +118,19 @@ const Drills=(()=>{
     const key=commandKey(d);
     if(needsReview)missed.add(key);else missed.delete(key);
     store.set('ns_command_review',[...missed]);
+    if(sess&&cur&&!cur.reported){cur.reported=true;if(!cur.retry)sess.onResult(!needsReview);}
   }
+  // a missed drill comes back: a few questions later in free practice, at the end of a path session
+  function requeue(){if(sess){if(sess.extra<3){sess.q.push({i:cur.i,retry:true});sess.extra++;}}else queue.splice(Math.min(3,queue.length),0,cur.i);}
   const groups=['All',reviewGroup,...new Set(CS.DRILLS.map(d=>d.g))];
   const root=$('#v-drills');
   function fill(){const pool=CS.DRILLS.map((d,i)=>i).filter(i=>group==='All'||(group===reviewGroup?missed.has(commandKey(CS.DRILLS[i])):CS.DRILLS[i].g===group));queue=queue.concat(shuffle(pool));}
   function nextItem(){
+    if(sess){if(!sess.q.length){const s=sess;sess=null;cur=null;s.onDone();return;}
+      const it=sess.q.shift(),dr=CS.DRILLS[it.i],v=dr.gen?dr.gen():{};
+      const dev=IOS.newDevice(dr.dev,dr.dev==='router'?pickName('R'):dr.dev==='switch'?pickName('S'):'PC1');
+      if(dr.dev!=='pc'){dev.mode=dr.mode;dev.ctx=dr.ctx||null;if(dr.mode==='line')dev.vtyRange=[0,dev.vtyMax];}
+      cur={i:it.i,dr,v,dev,retry:!!it.retry};missedNow=false;shown=false;render();return;}
     if(group===reviewGroup)queue=queue.filter(i=>missed.has(commandKey(CS.DRILLS[i])));
     if(!queue.length)fill();
     if(!queue.length){
@@ -142,7 +153,7 @@ const Drills=(()=>{
     const inp=el('input',{id:'din',autocomplete:'off',autocapitalize:'off',autocorrect:'off',spellcheck:'false','aria-label':'Your command',enterkeyhint:'go',placeholder:'type the command'});
     const fb=el('div',{class:'dfb',id:'dfb','aria-live':'polite'});
     const check=el('button',{class:'btn primary',type:'button',text:'Check'}),showB=el('button',{class:'btn',type:'button',text:'Hint'}),skip=el('button',{class:'btn ghost',type:'button',text:'Skip'});
-    root.append(el('div',{class:'dmeta'},el('span',{text:`${dr.g} · ${dr.dev==='pc'?'PC':dr.dev==='router'?'router':'switch'}`}),el('span',{text:`Streak ${S.drill.streak} · best ${S.drill.best}`})),chips,
+    root.append(sess?sess.strip(cur):el('div',{class:'dmeta'},el('span',{text:`${dr.g} · ${dr.dev==='pc'?'PC':dr.dev==='router'?'router':'switch'}`}),el('span',{text:`Streak ${S.drill.streak} · best ${S.drill.best}`})),sess?'':chips,
       el('div',{class:'dpurpose',id:'dq',text:txt(dr.purpose,v)}),
       el('div',{class:'dbox'},el('span',{class:'tp',text:IOS.prompt(dev)}),inp),fb,el('div',{class:'dacts'},check,showB,skip),
       el('p',{class:'dim',style:'font-size:13px;margin-top:14px',text:'Any abbreviation IOS would accept counts (conf t, int g0/0, no shut…). Tab completes a partial command. When there is nothing to complete, Tab moves to the next control.'}));
@@ -157,7 +168,7 @@ const Drills=(()=>{
         const full=txt(dr.answer,v),sh=txt(dr.short,v);
         add(fb,el('div',{class:'ok',text:'✓ Correct'}),el('div',{class:'ans',text:full}),sh&&sh!==t.trim()&&sh!==full?el('div',{class:'dim',text:`Shortcut: ${sh}`}):null,dr.note?el('div',{class:'dim',text:dr.note}):null);
         fb.dataset.done='1';showB.disabled=true;check.textContent='Next';inp.readOnly=true;check.focus();return;}
-      if(!missedNow&&!shown){remember(dr,true);updateReviewCount();missedNow=true;S.drill.tried++;S.drill.streak=0;store.set('ns_drill',S.drill);renderStats();queue.splice(Math.min(3,queue.length),0,cur.i);}
+      if(!missedNow&&!shown){remember(dr,true);updateReviewCount();missedNow=true;S.drill.tried++;S.drill.streak=0;store.set('ns_drill',S.drill);renderStats();requeue();}
       if(r.ok){const what=CS.IDNAME[r.id];fb.append(el('div',{class:'out',text:dr.ids.includes(r.id)?'Right command, but check the value'+(r.args.length>1?'s':'')+'.':`That’s a real command, but it would ${what||'do something else'}.`}));}
       else{const scratch=IOS.newDevice(dr.dev==='pc'?'pc':dr.dev,dev.name);if(scratch.type!=='pc'){scratch.mode=dev.mode;scratch.ctx=dev.ctx;}
         const o=IOS.run(scratch,t);const pre=el('div',{class:'out'});
@@ -176,14 +187,17 @@ const Drills=(()=>{
       const out=a.map((tok,i)=>others.some(o=>o[i]!==tok)?(/^\d+\.\d+\.\d+\.\d+$/.test(tok)?(/^255\./.test(tok)?'<mask>':'<address>'):/^flash:/.test(tok)?'flash:<file name>':/:.*\//.test(tok)?'<IPv6 address>/<prefix>':'<value>'):tok).join(' ');return out===a.join(' ')?null:out;};
     let hinted=false;
     showB.onclick=()=>{if(!hinted&&!shown){const sp=shape();hinted=true;showB.textContent='Show answer';
-        if(sp){if(!missedNow){remember(dr,true);updateReviewCount();missedNow=true;S.drill.tried++;S.drill.streak=0;store.set('ns_drill',S.drill);renderStats();queue.splice(Math.min(3,queue.length),0,cur.i);}
+        if(sp){if(!missedNow){remember(dr,true);updateReviewCount();missedNow=true;S.drill.tried++;S.drill.streak=0;store.set('ns_drill',S.drill);renderStats();requeue();}
           fb.textContent='';add(fb,el('div',{class:'out',text:'The command looks like this. The values come from the task above.'}),el('div',{class:'ans',text:sp}));inp.focus();return;}}
-      if(!shown&&!missedNow){remember(dr,true);updateReviewCount();S.drill.tried++;S.drill.streak=0;store.set('ns_drill',S.drill);renderStats();queue.splice(Math.min(3,queue.length),0,cur.i);}shown=true;
+      if(!shown&&!missedNow){remember(dr,true);updateReviewCount();S.drill.tried++;S.drill.streak=0;store.set('ns_drill',S.drill);renderStats();requeue();}shown=true;
       fb.textContent='';const sh=txt(dr.short,v);add(fb,el('div',{class:'ans',text:txt(dr.answer,v)}),sh?el('div',{class:'dim',text:`Shortcut: ${sh}`}):null,dr.note?el('div',{class:'dim',text:dr.note}):null,el('div',{class:'dim',text:'Type it in to move on.'}));inp.focus();};
     skip.onclick=nextItem;
     if(isDesktop())inp.focus({preventScroll:true});
   }
-  return {start(){if(!cur)nextItem();else render();},get cur(){return cur;}};
+  return {start(){if(sess)return;if(!cur)nextItem();else render();},get cur(){return cur;},
+    // the learning path runs a session: these drills, each missed one asked again at the end
+    session(o){sess={q:o.idx.map(i=>({i})),extra:0,onResult:o.onResult,onDone:o.onDone,strip:o.strip};cur=null;nextItem();},
+    endSession(){sess=null;cur=null;},get inSession(){return !!sess;}};
 })();
 
 /* ---------------- tasks ---------------- */
@@ -588,6 +602,124 @@ const Lab=(()=>{
   return {start,load,get q(){return q;},get k(){return k;},get kind(){return kind;},check};
 })();
 
+/* ---------------- learning path ----------------
+   The drill topics in teaching order (path-content.js). Each unit: a short lesson, a quick check, then a drill
+   session. 80% right on the first try (no hint, no answer shown) adds a signal bar and unlocks the next unit, and
+   each bar waits longer before the unit is due for review (1, 3, 7, 16, 35 days). After the drills, the unit's
+   checkpoint task puts the commands to work on a simulated device. */
+const Path=(()=>{
+  const UNITS=(window.NSPath&&NSPath.UNITS)||[],DAY=864e5,WAIT=[0,1,3,7,16,35],MAXL=5;
+  const VIEWS=['path','drills','tasks','lab','sandbox','cheat'];
+  const root=$('#v-path');let view='map';
+  function load(){const raw=store.get('ns_path',null),p={u:{},days:[]};
+    if(raw&&typeof raw==='object'){const u=raw.u&&typeof raw.u==='object'?raw.u:{};
+      UNITS.forEach(x=>{const r=u[x.id];if(r&&typeof r==='object'){const l=Math.floor(Number(r.l)),d=Number(r.d);p.u[x.id]={l:l>=0&&l<=MAXL?l:0,d:Number.isFinite(d)?d:0,s:r.s===true};}});
+      if(Array.isArray(raw.days))p.days=raw.days.filter(d=>typeof d==='string'&&/^\d{4}-\d\d-\d\d$/.test(d)).slice(-60);}
+    return p;}
+  let P=load();
+  const save=()=>store.set('ns_path',P);
+  const U=id=>P.u[id]||(P.u[id]={l:0,d:0,s:false});
+  const ymd=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  function dayStreak(){const set=new Set(P.days),d=new Date();if(!set.has(ymd(d)))d.setDate(d.getDate()-1);let n=0;while(set.has(ymd(d))){n++;d.setDate(d.getDate()-1);}return n;}
+  const unlocked=i=>i===0||U(UNITS[i-1].id).l>=1;
+  const isDue=x=>{const u=U(x.id);return u.l>=1&&u.d<=Date.now();};
+  const taskDone=id=>!!(id&&S.tasks[id]&&S.tasks[id].done);
+  const tasksOf=x=>[x.task,x.task2].filter(Boolean);
+  const checkpoint=x=>tasksOf(x).find(t=>!taskDone(t));
+  const taskTitle=id=>(CS.TASKS.find(t=>t.id===id)||{}).title||id;
+  function recommend(){
+    const due=UNITS.filter(isDue).sort((a,b)=>U(a.id).d-U(b.id).d);
+    if(due.length>2)return {x:due[0],why:'review'};
+    for(let i=0;i<UNITS.length;i++){const x=UNITS[i];if(!unlocked(i))break;
+      if(U(x.id).l===0)return {x,why:'new'};
+      const t=checkpoint(x);if(t)return {x,why:'task',task:t};}
+    if(due.length)return {x:due[0],why:'review'};
+    const weakest=UNITS.slice().sort((a,b)=>U(a.id).l-U(b.id).l||U(a.id).d-U(b.id).d)[0];
+    return weakest?{x:weakest,why:'grow'}:null;
+  }
+  function bars(l){const s=el('span',{class:'pl-bars',role:'img','aria-label':`Signal ${l} of ${MAXL}`});for(let i=1;i<=MAXL;i++)s.append(el('i',{class:i<=l?'on':'',style:`height:${4+i*3}px`}));return s;}
+  function dueText(x){const u=U(x.id);if(!u.l)return '';const d=Math.ceil((u.d-Date.now())/DAY);return d<=0?'Review due':d===1?'Review tomorrow':`Review in ${d} days`;}
+  const num=i=>String(i+1).padStart(2,'0');
+  const focus=on=>document.body.classList.toggle('pl-focus',on);
+  const show=v=>VIEWS.forEach(k=>{$('#v-'+k).hidden=k!==v;});
+  function back(){return el('button',{type:'button',class:'pl-back',id:'plBack',text:'← Path',onclick:()=>map()});}
+  function map(){
+    view='map';focus(false);if(Drills.inSession)Drills.endSession();show('path');root.textContent='';
+    const r=recommend();if(!r)return;
+    const verb=r.why==='new'?'Learn':r.why==='review'?'Review':r.why==='task'?'Checkpoint':'Practice';
+    const label=r.why==='task'?taskTitle(r.task):r.x.name;
+    const streak=dayStreak();
+    root.append(el('div',{class:'pl-head'},el('div',null,el('div',{class:'pl-kicker',text:'Your path'}),el('h2',{text:`${UNITS.filter(x=>U(x.id).l>=1).length} of ${UNITS.length} units started`})),
+      el('div',{class:'pl-streak',title:'Days in a row with a finished session'},el('b',{text:String(streak)}),el('small',{text:streak===1?'day in a row':'days in a row'}))));
+    root.append(el('button',{type:'button',class:'btn primary pl-start',id:'plStart',onclick:()=>r.why==='task'?openTask(r.task):open(r.x)},el('small',{text:`${verb} · ${num(UNITS.indexOf(r.x))}`}),el('span',{text:label+' →'})));
+    const ol=el('ol',{class:'pl-map'});
+    UNITS.forEach((x,i)=>{const u=U(x.id),op=unlocked(i),due=isDue(x),cp=tasksOf(x);
+      const sub=!op?'Finish the unit above to unlock':u.l?dueText(x):x===r.x?'Start here':'New';
+      const li=el('li',{class:['pl-node',op?'':'locked',x===r.x?'next':'',due?'due':''].join(' ')});
+      li.append(el('button',{type:'button','data-u':x.id,disabled:!op,'aria-label':x.name+(op?'':', locked'),onclick:()=>open(x,true)},
+        el('span',{class:'pl-num',text:num(i)}),el('span',{class:'pl-txt'},el('b',{text:x.name}),el('small',{text:sub})),op?bars(u.l):el('span',{class:'pl-lock','aria-hidden':'true',text:'🔒'})));
+      if(op&&u.l>=1&&cp.length)li.append(el('div',{class:'pl-cps'},...cp.map(t=>el('button',{type:'button',class:'pl-cp'+(taskDone(t)?' done':''),'data-task':t,onclick:()=>openTask(t)},el('span',{'aria-hidden':'true',text:taskDone(t)?'✓':'▸'}),document.createTextNode(' Checkpoint: '+taskTitle(t))))));
+      ol.append(li);});
+    root.append(ol,
+      el('p',{class:'pl-note',text:'Each unit starts with a short lesson. A drill session with 80% right on the first try adds a bar and unlocks the next unit, and the unit comes back for review later so it sticks. A checkpoint task then puts the commands to work on a simulated device.'}),
+      el('div',{class:'pl-free'},el('div',{class:'pl-kicker',text:'After the path'}),el('p',{class:'dim',text:'The Packet Tracer labs (subnetting, VLSM, connecting a router, IPv6 Neighbor Discovery) use everything above.'}),
+        el('button',{type:'button',class:'btn',id:'plLabs',text:'Open the Packet Tracer labs',onclick:()=>{setTab('lab');go('lab');}})));
+  }
+  function setTab(v){try{history.replaceState(null,'',location.pathname+(v==='path'?'':'?tab='+v));}catch(e){}}
+  function openTask(id){go('tasks',{id});try{const u=new URL(location.href);u.search='';u.searchParams.set('task',id);history.replaceState(null,'',u.toString());}catch(e){}}
+  function open(x,fromMap){const u=U(x.id);if(!u.s||(fromMap&&u.l===0))return lesson(x,0);if(fromMap)return unit(x);session(x);}
+  function unit(x){view='unit';focus(true);root.textContent='';const u=U(x.id),i=UNITS.indexOf(x);
+    root.append(back(),el('div',{class:'pl-kicker',text:`Unit ${num(i)} · ${x.group}`}),el('h2',{text:x.name}),el('div',{class:'pl-unitbars'},bars(u.l),el('span',{text:`${u.l} of ${MAXL}${dueText(x)?' · '+dueText(x):''}`})),
+      el('div',{class:'pl-actions'},el('button',{type:'button',class:'btn primary',id:'plGo',text:`Drill · ${x.n} commands`,onclick:()=>session(x)}),el('button',{type:'button',class:'btn',id:'plLesson',text:'Read the lesson again',onclick:()=>lesson(x,0)}),
+        ...tasksOf(x).map(t=>el('button',{type:'button',class:'btn',text:(taskDone(t)?'✓ ':'')+'Checkpoint: '+taskTitle(t),onclick:()=>openTask(t)}))));}
+  function lesson(x,step){
+    view='learn';focus(true);root.textContent='';const n=x.learn.length,i=UNITS.indexOf(x),onCheck=step>=n;
+    const dots=el('div',{class:'pl-steps','aria-hidden':'true'});for(let k=0;k<=n;k++)dots.append(el('i',{class:k<step?'done':k===step?'on':''}));
+    const body=el('div',{class:'pl-body'}),acts=el('div',{class:'pl-actions'});
+    root.append(back(),el('div',{class:'pl-kicker',text:`Unit ${num(i)} · Lesson`}),el('h2',{text:x.name}),dots,body,acts);
+    if(step>0)acts.append(el('button',{type:'button',class:'btn',id:'plPrev',text:'Back',onclick:()=>lesson(x,step-1)}));
+    if(!onCheck){body.innerHTML=x.learn[step];const nb=el('button',{type:'button',class:'btn primary',id:'plNext',text:step===n-1?'Quick check →':'Next →',onclick:()=>lesson(x,step+1)});acts.append(nb);if(isDesktop())nb.focus({preventScroll:true});}
+    else{const why=el('div',{class:'pl-why',id:'plWhy',role:'status'}),nb=el('button',{type:'button',class:'btn primary',id:'plNext',hidden:true,text:'Start the drills →',onclick:()=>session(x)});acts.append(nb);
+      let tries=0;const opts=shuffle(x.check.o.map((t,k)=>[t,k])).map(([t,k])=>el('button',{type:'button',class:'btn pl-opt','data-k':String(k),text:t,onclick:e=>{const b=e.currentTarget;if(b.disabled)return;tries++;
+        if(k===x.check.a){opts.forEach(o=>o.disabled=true);b.classList.add('ok');why.className='pl-why good';why.textContent=(tries===1?'Right. ':'There it is. ')+x.check.why;U(x.id).s=true;save();nb.hidden=false;nb.focus({preventScroll:true});}
+        else{b.disabled=true;b.classList.add('no');why.className='pl-why bad';why.textContent=tries>=2?x.check.why+' Pick it to go on.':'Not that one. Look back at the lesson and try again.';}}}));
+      body.append(el('div',{class:'pl-kicker',text:'Quick check'}),el('p',{class:'pl-q',text:x.check.q}),el('div',{class:'pl-opts'},...opts),why);}
+    root.scrollIntoView({block:'start'});
+  }
+  function session(x){
+    const pool=CS.DRILLS.map((d,i)=>i).filter(i=>CS.DRILLS[i].g===x.group);let idx=[];while(idx.length<x.n)idx=idx.concat(shuffle(pool));idx=idx.slice(0,x.n);
+    const st={right:0,scored:0,served:0};view='run';
+    $$('#tabs .tab').forEach(b=>b.classList.toggle('on',b.dataset.v==='path'));show('drills');focus(true);
+    Drills.session({idx,
+      onResult(first){st.scored++;if(first)st.right++;},
+      onDone(){done(x,st);},
+      strip(c){if(!c.retry)st.served++;
+        return el('div',{class:'pl-run'},el('button',{type:'button',class:'pl-back',id:'plQuit','aria-label':'End this session',text:'✕',onclick:()=>{Drills.endSession();map();}}),
+          el('div',{class:'pl-runtxt'},el('b',{text:x.name}),el('small',{text:c.retry?'Fixing one you missed':`Command ${st.served} of ${x.n}`})),
+          el('div',{class:'pl-prog','aria-hidden':'true'},el('i',{style:`width:${Math.round(100*st.scored/x.n)}%`})),bars(U(x.id).l));}});
+    $('#v-drills').scrollIntoView({block:'start'});
+  }
+  function done(x,st){
+    const u=U(x.id),before=u.l,pct=st.scored?st.right/st.scored:0;let msg;
+    if(pct>=0.8){u.l=Math.min(MAXL,u.l+1);u.d=Date.now()+WAIT[u.l]*DAY;msg=u.l>before?'Signal up!':'Full signal. Keep it there.';}
+    else if(pct>=0.5){u.d=Date.now()+DAY;msg='Getting there. One more session should do it.';}
+    else{u.l=Math.max(0,u.l-1);u.d=Date.now();msg='This one needs another pass. Reread the lesson, then try again.';}
+    u.s=true;const t=ymd(new Date());if(!P.days.includes(t))P.days.push(t);P.days=P.days.slice(-60);save();
+    view='done';show('path');focus(true);root.textContent='';
+    const i=UNITS.indexOf(x),nx=UNITS[i+1],cp=checkpoint(x),acts=el('div',{class:'pl-actions'});
+    if(pct>=0.8&&cp)acts.append(el('button',{type:'button',class:'btn primary',id:'plCont',text:`Checkpoint: ${taskTitle(cp)} →`,onclick:()=>openTask(cp)}));
+    else acts.append(el('button',{type:'button',class:'btn primary',id:'plCont',text:'Continue →',onclick:()=>{const r=recommend();if(r.why==='task')openTask(r.task);else open(r.x);}}));
+    acts.append(pct<0.5?el('button',{type:'button',class:'btn',id:'plRe',text:'Reread the lesson',onclick:()=>lesson(x,0)}):el('button',{type:'button',class:'btn',id:'plAgain',text:'Drill again',onclick:()=>session(x)}),el('button',{type:'button',class:'btn ghost',id:'plMap',text:'Path',onclick:()=>map()}));
+    root.append(el('div',{class:'pl-done'},el('div',{class:'pl-kicker',text:'Session complete'}),el('h2',{text:msg}),
+      el('div',{class:'pl-score'},el('b',{text:`${st.right}/${st.scored}`}),el('span',{text:' right on the first try'})),
+      el('div',{class:'pl-unitbars'},bars(before),el('span',{'aria-hidden':'true',text:'→'}),bars(u.l),el('span',{text:`${x.name} · ${dueText(x)}`})),
+      before===0&&u.l>=1&&nx?el('p',{class:'pl-unlock',text:`Unlocked: ${nx.name}`}):null,
+      pct>=0.8&&cp?el('p',{class:'dim',text:'Now put the commands together on a device. The checkpoint’s goals tick off as you configure it.'}):null,acts));
+    $('#plCont').focus({preventScroll:true});root.scrollIntoView({block:'start'});
+  }
+  return {map,get view(){return view;},get progress(){return P;},UNITS,reset(){P={u:{},days:[]};save();}};
+})();
+
 /* ---------------- start: ?tab=… or ?task=…(&lab=…&hosts=…&r1=…&r2=…) ---------------- */
 function subParams(sp){const h=String(sp.get('hosts')||'').slice(0,20).split(',');const r=LAB.subFrom(String(sp.get('subnet')||'').slice(0,40),h[0],h[1],String(sp.get('spare')||'').slice(0,4));return r.err?undefined:{subnet:r.base,hosts:`${r.a},${r.b}`,spare:r.spare};}
 function vlsmParams(sp){const r=LAB.vlsmFrom(String(sp.get('vlsm')||'').slice(0,40),String(sp.get('hosts')||'').slice(0,40));return r.err?undefined:{vlsm:r.base,hosts:r.hosts.join(',')};}
@@ -606,7 +738,8 @@ renderStats();
   else if(sp.has('vlsm')&&!task){const p=vlsmParams(sp);go('lab',{lab:p?{kind:'vlsm',base:p.vlsm,hosts:p.hosts.split(',').map(Number)}:{kind:'vlsm'}});}
   else if(sp.get('lab')==='nd'&&!task){go('lab',{lab:{kind:'nd'}});}
   else if(sp.has('lab')&&!task){const p=labParams(sp);go('lab',p?{lab:{kind:'lab',base:p.lab,hosts:p.hosts,r1:p.r1,r2:p.r2}}:undefined);}
-  else go(['drills','tasks','lab','sandbox','cheat'].includes(tab)?tab:'drills');})();
+  else{const TABS=['path','drills','tasks','lab','sandbox','cheat'],last=store.get('ns_tab',null),dflt=window.NS_DEFAULT_TAB;/* tests written before the path set NS_DEFAULT_TAB */
+    go(TABS.includes(tab)?tab:TABS.includes(last)?last:TABS.includes(dflt)?dflt:'path');}})();
 
-window.NS={go,Tasks,Drills,Lab,NDLab,S,IOS,CS,LAB,ND};
+window.NS={go,Path,Tasks,Drills,Lab,NDLab,S,IOS,CS,LAB,ND};
 })();

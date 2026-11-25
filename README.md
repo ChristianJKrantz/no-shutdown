@@ -23,6 +23,15 @@ Works in any modern browser on desktop, tablet or phone. No install, no account,
 
 ## Features
 
+### Learning path (start here)
+A fresh visit opens on the **Path**: eight units in the order you'd learn them on a real device. Modes, first-time setup, passwords, interfaces, checking your work, saving and resetting, SSH, then hardening logins. One big button always shows what to do next.
+
+- **Learn, then check.** Each unit opens with a short lesson (a few screens with a sample console) and ends in a quick check you have to get right before the drills start. A wrong pick sends you back to the lesson.
+- **Drill to mastery.** A session is 5–6 drills from that unit's topic, with new values every time. A drill you miss comes back at the end.
+- **Signal bars.** 80% right on the first try (no hint, no answer shown) adds a bar (up to five) and unlocks the next unit. Each bar waits longer before the unit is due for review: 1, 3, 7, 16, then 35 days.
+- **Checkpoints.** Once a unit's drills are done, its checkpoint task puts the commands together on a simulated device (Basic router setup after Passwords, Router interfaces and Switch management after Interfaces, and so on). The path ticks it off when the task is finished.
+- On a phone, a lesson or session hides the header and tabs so the command box sits near the top of the screen. The Drills tab is still free practice on any topic.
+
 ### Drills
 One job at a time: the drill names a task ("Give this interface the address 192.168.101.1 255.255.255.0") and shows the prompt you're at, and you type the command.
 
@@ -146,6 +155,7 @@ python3 -m http.server
 node tests/test_ios.js        # the IOS simulator: modes, errors, help, passwords, saving, ping, SSH (82 checks)
 node tests/solve_tasks.js     # solves every task 25 times with fresh values using its own Show me steps,
                               # and checks every drill answer and shortcut is accepted
+python3 tests/test_path.py    # the learning path: lesson gate, first-try scoring, unlocks, checkpoints, every unit, phones
 python3 tests/test_ui.py      # browser tests with Playwright: drills, completing all thirteen tasks by typing,
                               # lab links and bad values, phone layout, and typed HTML staying text
 python3 tests/test_lab.py     # both Packet Tracer labs: the handout answers, 300 random networks each, feedback
@@ -163,6 +173,7 @@ The browser tests need `pip install playwright` and `playwright install chromium
 | `index.html` | The page and its styles |
 | `ios.js` | The IOS simulator: command grammar, modes, errors, help, device state, ping and SSH |
 | `content.js` | Drills, tasks and the cheat sheet |
+| `path-content.js` | The learning path's units: lessons, quick checks and checkpoint tasks |
 | `lab.js` | The Packet Tracer labs' subnetting parts: the networks, questions, feedback, hints and printouts |
 | `nd.js` | The 9.3.4 network and its IPv6 Neighbor Discovery, recorded as simulation events |
 | `app.js` | The interface: console, PC panel, drills, tasks, the lab, sandbox |

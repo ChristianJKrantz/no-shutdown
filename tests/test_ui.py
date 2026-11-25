@@ -1,6 +1,7 @@
 """Browser tests for No Shutdown (python3 tests/test_ui.py).
 Set NS_URL to test a served copy; the default is the local index.html."""
 from playwright.sync_api import sync_playwright
+import drills_default  # noqa: F401  (pages open on Drills, not the Path)
 import os, json
 URL = os.environ.get('NS_URL', 'file://' + os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'index.html')))
 R = []
@@ -128,7 +129,7 @@ with sync_playwright() as pw:
                 'lab=<script>&hosts=25&r1=2&r2=2']:
         p = scen('?task=scenario&' + bad)
         ok(f'bad link values fall back to random ones ({bad[:24]}…)', p and p['lab'] != bad.split('&')[0][4:] and 'script' not in json.dumps(p))
-    pg.goto(URL + '?task=nope'); pg.wait_for_timeout(100); ok('an unknown task opens Drills', pg.is_visible('#v-drills'))
+    pg.evaluate("localStorage.removeItem('ns_tab')"); pg.goto(URL + '?task=nope'); pg.wait_for_timeout(100); ok('an unknown task opens Drills', pg.is_visible('#v-drills'))
     pg.goto(URL + '?tab=cheat'); pg.wait_for_timeout(100); ok('?tab=cheat opens the cheat sheet', pg.is_visible('#v-cheat') and 'copy running-config startup-config' in pg.text_content('#v-cheat'))
 
     # ---------- safety: what you type is shown as text ----------

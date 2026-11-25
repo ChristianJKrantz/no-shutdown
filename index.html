@@ -265,6 +265,52 @@ header .row{gap:10px}header .sister{color:#294b35;background:transparent;border-
   .tin input{flex:1 1 12ch;min-width:min(12ch,100%)}
 }
 .lab-fold{border:1px solid var(--line);border-radius:7px;margin-bottom:8px;padding:0 12px}.lab-fold summary{min-height:44px;display:list-item;align-content:center;cursor:pointer;color:var(--text);font-weight:600}.lab-fold[open]>summary{margin-bottom:8px}.lab-title{font-size:clamp(20px,3vw,30px);line-height:1.2;margin:16px 0 10px}.lab-tools .row{margin:8px 0 12px}.lab-tables{min-width:0}.lab .lab-grid{align-items:start}
+
+/* ---------- learning path ---------- */
+#v-path{padding:clamp(18px,3.5vw,40px);max-width:none}
+.pathv h2{font:800 clamp(24px,3vw,34px)/1.1 Inter,system-ui,sans-serif;letter-spacing:-.03em;margin:4px 0 0}
+.pl-kicker{font:600 12px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+.pl-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:16px}
+.pl-streak{text-align:center;min-width:86px;flex:none;border:1px solid var(--line);border-radius:8px;padding:6px 12px}
+.pl-streak b{display:block;font:700 26px/1 var(--mono);color:var(--warn)}.pl-streak small{font:11px var(--mono);color:var(--muted)}
+.pl-start{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:14px 18px;border-radius:8px;text-align:left;font:800 clamp(20px,2.6vw,26px)/1.15 Inter,system-ui,sans-serif;letter-spacing:-.02em;box-shadow:none}
+.pl-start small{font:700 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;opacity:.75}
+.pl-map{list-style:none;margin:18px 0 0;padding:0 0 0 22px;position:relative;display:grid;gap:8px}
+.pl-map::before{content:"";position:absolute;left:8px;top:16px;bottom:16px;width:2px;background:repeating-linear-gradient(var(--accent) 0 6px,transparent 6px 11px);opacity:.5}
+.pl-node{position:relative}
+.pl-node::before{content:"";position:absolute;left:-19px;top:24px;width:10px;height:10px;border-radius:2px;background:var(--panel);border:2px solid var(--accent)}
+.pl-node.locked::before{border-color:var(--line)}.pl-node.next::before{background:var(--accent);box-shadow:0 0 0 4px #c2f65b33}.pl-node.due::before{background:var(--warn);border-color:var(--warn)}
+.pl-node>button{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;color:var(--text);min-height:54px;font:inherit}
+.pl-node>button:hover:not(:disabled){border-color:var(--accent)}
+.pl-node.next>button{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.pl-node.locked>button{opacity:.55;cursor:not-allowed}
+.pl-num{font:13px var(--mono);color:var(--muted);width:22px}
+.pl-txt{flex:1;min-width:0}.pl-txt b{display:block;font-size:15px}.pl-txt small{color:var(--muted);font-size:12.5px}
+.pl-node.due .pl-txt small{color:var(--warn)}
+.pl-bars{display:inline-flex;align-items:flex-end;gap:2px;height:20px}.pl-bars i{display:block;width:5px;border-radius:1px;background:#466253}.pl-bars i.on{background:var(--accent)}
+.pl-cps{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px 34px}
+.pl-cp{background:transparent;border:1px dashed var(--line);border-radius:6px;padding:6px 10px;font:600 12.5px var(--mono);color:var(--accent);min-height:36px}
+.pl-cp.done{border-style:solid;color:var(--muted)}.pl-cp:hover{border-color:var(--accent)}
+.pl-note{color:var(--muted);font-size:13px;margin:16px 0 0;line-height:1.5}
+.pl-free{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}.pl-free p{margin:6px 0 10px;font-size:14px}
+.pl-back{background:none;border:0;color:var(--accent);font:600 14px var(--mono);padding:4px 0;margin-bottom:8px;min-height:32px}
+.pl-body{margin:14px 0 6px;max-width:64ch;font-size:16px;line-height:1.55}.pl-body p{margin:0 0 10px}.pl-body ul{margin:0 0 10px;padding-left:22px}.pl-body li{margin:3px 0}
+.pl-con{background:#0b1813;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:6px;padding:10px 12px;margin:8px 0 12px;font:14px/1.6 var(--mono);overflow-x:auto;white-space:pre}
+.pl-con .p{color:var(--accent);margin-right:.5ch}.pl-con .o{color:var(--muted)}
+.pl-steps{display:flex;gap:5px;margin-top:12px}.pl-steps i{flex:1;height:4px;border-radius:2px;background:#466253}.pl-steps i.done{background:var(--muted)}.pl-steps i.on{background:var(--accent)}
+.pl-q{font-weight:600;font-size:17px}.pl-opts{display:grid;gap:8px;margin:8px 0}.pl-opt{text-align:left;min-height:46px;font:600 14px var(--mono)}
+.pl-opt.ok{border-color:var(--good);background:#21452f}.pl-opt.no{border-color:var(--bad);opacity:.6;text-decoration:line-through}
+.pl-why{min-height:1.5em;font-size:15px}.pl-why.good{color:var(--good)}.pl-why.bad{color:#ffb3bd}
+.pl-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}.pl-actions .btn{min-height:44px}
+.pl-run{display:flex;align-items:center;gap:12px;padding-bottom:14px;border-bottom:1px solid #45604e}.pl-run .pl-back{margin:0;font-size:18px;width:32px}
+.pl-runtxt{min-width:0}.pl-runtxt b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pl-runtxt small{color:var(--muted);font:12px var(--mono)}
+.pl-prog{flex:1;height:8px;border-radius:4px;background:#2c4338;overflow:hidden;min-width:60px}.pl-prog i{display:block;height:100%;background:var(--accent);transition:width .3s}
+.pl-unitbars{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px;margin:10px 0;flex-wrap:wrap}
+.pl-score b{font:700 40px var(--mono);color:var(--accent);margin-right:6px}.pl-score span{color:var(--muted)}
+.pl-unlock{color:var(--accent);margin:6px 0 0;font-weight:600}
+@media(max-width:700px){body.pl-focus .app>header,body.pl-focus .tabs{display:none}.pl-run .pl-bars{display:none}}
+@media(prefers-reduced-motion:reduce){.pl-prog i{transition:none}}
+@media print{#v-path{display:none!important}}
 </style>
 </head>
 <body>
@@ -284,6 +330,7 @@ header .row{gap:10px}header .sister{color:#294b35;background:transparent;border-
     </div>
   </header>
   <nav class="tabs" id="tabs" aria-label="Sections">
+    <button class="tab" data-v="path"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h6a4 4 0 0 0 0-8h-4a4 4 0 0 1 0-8h6"/></svg>Path</button>
     <button class="tab" data-v="drills"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M4 6l6 6-6 6m9 0h7"/></svg>Drills</button>
     <button class="tab" data-v="tasks"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M5 5h14v14H5z M8 10l2 2 4-5"/></svg>Tasks</button>
     <button class="tab" data-v="lab"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M4 4h6v6H4z M14 14h6v6h-6z M7 10v7h7"/></svg>Packet Tracer lab</button>
@@ -291,6 +338,7 @@ header .row{gap:10px}header .sister{color:#294b35;background:transparent;border-
     <button class="tab" data-v="cheat"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M3 5q5-2 9 1 4-3 9-1v14q-5-2-9 0-4-2-9 0z M12 6v13"/></svg>Cheat sheet</button>
   </nav>
   <main>
+    <section id="v-path" class="card pathv" hidden aria-label="Learning path"></section>
     <section id="v-drills" class="card drill" hidden></section>
     <section id="v-tasks" hidden></section>
     <section id="v-lab" class="card lab" hidden></section>
@@ -303,6 +351,7 @@ header .row{gap:10px}header .sister{color:#294b35;background:transparent;border-
 <script src="content.js"></script>
 <script src="lab.js"></script>
 <script src="nd.js"></script>
+<script src="path-content.js"></script>
 <script src="app.js"></script>
 <div id="printArea" aria-hidden="true"></div>
 </body>

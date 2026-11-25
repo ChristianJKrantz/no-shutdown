@@ -2,6 +2,7 @@
 11.5.5 Subnet an IPv4 Network (Part 1 questions and the hand-off to Part 2), 10.3.4 Connect a Router to a LAN
 (goals plus the handout questions, checked live), and 9.3.4 IPv6 Neighbor Discovery (simulation, event list, questions)."""
 from playwright.sync_api import sync_playwright
+import drills_default  # noqa: F401  (pages open on Drills, not the Path)
 import os, re, sys
 URL = os.environ.get('NS_URL', 'file://' + os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'index.html')))
 fails = []

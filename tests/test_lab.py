@@ -4,6 +4,7 @@ printing and phones. Part 2: the hand-off to the scenario task with the same net
 python3 tests/test_lab.py  (needs Playwright; the print check also needs PyMuPDF)"""
 import os, sys, re
 from playwright.sync_api import sync_playwright
+import drills_default  # noqa: F401  (pages open on Drills, not the Path)
 URL=os.environ.get('NS_URL','file://'+os.path.abspath(os.path.join(os.path.dirname(__file__),'..','index.html')))
 CLASS='?lab=192.168.100.0&hosts=25&r1=2&r2=2'
 fails=[]
