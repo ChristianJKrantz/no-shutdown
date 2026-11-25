@@ -35,6 +35,11 @@ A fresh visit opens on the **Path**: eight units in the order you'd learn them o
 - **Checkpoints.** Once a unit's drills are done, its checkpoint task puts the commands together on a simulated device (Basic router setup after Passwords, Router interfaces and Switch management after Interfaces, and so on). The path ticks it off when the task is finished.
 - On a phone, a lesson or session hides the header and tabs so the command box sits near the top of the screen. The Drills tab is still free practice on any topic.
 
+<p align="center">
+  <img src="docs/path.png" alt="The learning path: eight units with signal bars and a Start button" width="560">
+  <img src="docs/phone-path.png" alt="Phone: the learning path with the bottom tab bar" width="200">
+</p>
+
 ### Drills
 One job at a time: the drill names a task ("Give this interface the address 192.168.101.1 255.255.255.0") and shows the prompt you're at, and you type the command.
 
