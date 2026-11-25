@@ -98,7 +98,8 @@ function go(v,arg){
   view=v;$$('#tabs .tab').forEach(b=>b.classList.toggle('on',b.dataset.v===v));$('#cheatBtn').classList.toggle('on',v==='cheat');
   ['path','drills','tasks','lab','sandbox','cheat'].forEach(k=>{$('#v-'+k).hidden=k!==v;});
   document.body.classList.toggle('pl-focus',false);
-  if(v!=='drills'&&Drills.inSession)Drills.endSession();
+  if(v!=='cheat')cheatBack=null;
+  if(v!=='drills'&&v!=='cheat'&&Drills.inSession)Drills.endSession();
   if(v==='path')Path.map();
   if(v==='drills')Drills.start();
   if(v==='tasks'){if(arg)Tasks.open(arg.id,arg.params);else Tasks.list();}
@@ -106,7 +107,22 @@ function go(v,arg){
   if(v==='sandbox')Sandbox.start();
   if(v==='cheat')Cheat.render();
 }
-$('#cheatBtn').onclick=()=>{try{history.replaceState(null,'',location.pathname+'?tab=cheat');}catch(e){}store.set('ns_tab','cheat');go('cheat');};
+// the book button opens the cheat sheet; pressing it again puts back exactly what was on screen before
+// (an unfinished drill, lesson, task or lab included), since the other sections are only hidden, not redrawn
+let cheatBack=null;
+$('#cheatBtn').onclick=()=>{
+  const btn=$('#cheatBtn');
+  if(view==='cheat'){
+    const b=cheatBack;cheatBack=null;btn.setAttribute('aria-pressed','false');
+    if(!b){try{history.replaceState(null,'',location.pathname);}catch(e){}store.set('ns_tab','path');go('path');return;}
+    view=b.view;['path','drills','tasks','lab','sandbox','cheat'].forEach(k=>{$('#v-'+k).hidden=k!==b.shown;});
+    $$('#tabs .tab').forEach(t=>t.classList.toggle('on',t.dataset.v===b.tab));btn.classList.remove('on');
+    document.body.classList.toggle('pl-focus',b.focus);
+    try{history.replaceState(null,'',b.url);}catch(e){}store.set('ns_tab',b.tab||'path');
+    window.scrollTo(0,b.y);return;}
+  const on=$('#tabs .tab.on');
+  const back={view,shown:['path','drills','tasks','lab','sandbox'].find(k=>!$('#v-'+k).hidden)||'path',tab:on?on.dataset.v:null,url:location.href,y:window.scrollY,focus:document.body.classList.contains('pl-focus')};
+  try{history.replaceState(null,'',location.pathname+'?tab=cheat');}catch(e){}store.set('ns_tab','cheat');go('cheat');cheatBack=back;btn.setAttribute('aria-pressed','true');window.scrollTo(0,0);};
 $$('#tabs .tab').forEach(b=>b.onclick=()=>{try{history.replaceState(null,'',location.pathname+(b.dataset.v==='path'?'':'?tab='+b.dataset.v));}catch(e){}store.set('ns_tab',b.dataset.v);if(b.dataset.v==='drills'&&Drills.inSession)Drills.endSession();go(b.dataset.v);});
 
 /* ---------------- drills ---------------- */

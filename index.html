@@ -333,11 +333,19 @@ header .row{gap:10px}header .sister{color:#294b35;background:transparent;border-
   .tabs .tab{flex:1 1 0;min-width:0;flex-direction:column;justify-content:center;gap:2px;border:0;background:transparent;border-radius:8px;padding:6px 2px;min-height:54px;font-size:11.5px;color:#4b5d50}
   .tabs .tab .tic{width:22px;height:22px}
   .tabs .tab.on{background:#203e2e;color:#f7faed;box-shadow:none}
-  .tbadge{position:absolute;top:0;right:calc(50% - 32px);font-size:9.5px;padding:0 4px}
+  .tbadge{position:absolute;top:3px;left:calc(50% + 9px);right:auto;font-size:9px;line-height:14px;padding:0 4px}
   body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
   body.pl-focus{padding-bottom:0}
 }
 @media print{.hcheat{display:none!important}}
+
+/* bigger touch targets on phones: terminal keys, small buttons, chips and device tabs */
+@media(max-width:700px){
+  .tkeys button{min-height:40px;min-width:44px}
+  .btn.small{min-height:40px}
+  .chip{min-height:36px}
+  .dtabs button{min-height:40px}
+}
 </style>
 </head>
 <body>
@@ -347,7 +355,7 @@ header .row{gap:10px}header .sister{color:#294b35;background:transparent;border-
       <h1><img class="brand-mark" src="icon.svg?v=2" alt=""><span class="cur">No&nbsp;<span>Shutdown</span></span><button class="install" id="installBtn" hidden><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></span>Install app</button></h1>
       <div class="sub">Practice Cisco IOS commands on simulated routers and switches.</div>
     </div>
-    <button class="hcheat" id="cheatBtn" type="button" data-v="cheat" aria-label="Cheat sheet" title="Cheat sheet"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5q5-2 9 1 4-3 9-1v14q-5-2-9 0-4-2-9 0z M12 6v13"/></svg><span>Cheat sheet</span></button>
+    <button class="hcheat" id="cheatBtn" type="button" data-v="cheat" aria-label="Cheat sheet" aria-pressed="false" title="Cheat sheet (press again to go back)"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5q5-2 9 1 4-3 9-1v14q-5-2-9 0-4-2-9 0z M12 6v13"/></svg><span>Cheat sheet</span></button>
   </header>
   <nav class="tabs" id="tabs" aria-label="Sections">
     <button class="tab" data-v="path"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="tic"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h6a4 4 0 0 0 0-8h-4a4 4 0 0 1 0-8h6"/></svg><span class="tl">Path</span></button>

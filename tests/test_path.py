@@ -6,7 +6,9 @@ import os, sys, threading, http.server, functools
 from playwright.sync_api import sync_playwright
 ROOT=os.path.abspath(os.path.join(os.path.dirname(__file__),'..'))
 srv=http.server.ThreadingHTTPServer(('127.0.0.1',0),functools.partial(http.server.SimpleHTTPRequestHandler,directory=ROOT,**{}))
-srv.RequestHandlerClass.log_message=lambda *a:None
+class Quiet(http.server.SimpleHTTPRequestHandler):
+    def log_message(self,*a): pass
+srv.RequestHandlerClass=functools.partial(Quiet,directory=ROOT)
 threading.Thread(target=srv.serve_forever,daemon=True).start()
 URL=f'http://127.0.0.1:{srv.server_address[1]}/'
 fails=[]

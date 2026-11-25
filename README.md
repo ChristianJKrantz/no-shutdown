@@ -134,7 +134,7 @@ For 11.7.5, `lab` is the /24 network, `hosts` the addresses each LAN needs, and 
 A factory-fresh router, switch and PC cabled together, with no goals and no score.
 
 ### Cheat sheet
-Open it from the book button at the top right of the page.
+Open it from the book button at the top right of the page. Press the button again to go back to exactly where you were, even in the middle of a drill or a path session.
 The commands from the drills and tasks in one page, grouped by topic, with the prompt each one is typed at.
 
 <p align="center"><img src="docs/phone.png" width="300" alt="Basic router setup with phone console controls"></p>
@@ -159,6 +159,7 @@ python3 -m http.server
 node tests/test_ios.js        # the IOS simulator: modes, errors, help, passwords, saving, ping, SSH (82 checks)
 node tests/solve_tasks.js     # solves every task 25 times with fresh values using its own Show me steps,
                               # and checks every drill answer and shortcut is accepted
+python3 tests/test_layout.py  # header, cheat-sheet button, Tasks badge, bottom tab bar
 python3 tests/test_path.py    # the learning path: lesson gate, first-try scoring, unlocks, checkpoints, every unit, phones
 python3 tests/test_ui.py      # browser tests with Playwright: drills, completing all thirteen tasks by typing,
                               # lab links and bad values, phone layout, and typed HTML staying text
