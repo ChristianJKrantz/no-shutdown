@@ -4,7 +4,7 @@
 
 ## About
 
-Practice Cisco IOS commands in a forest-green console. In **Drills → Practice topic → Missed commands**, a correct first try clears the command from your saved review queue. In **Packet Tracer lab**, use **Change lab** for lab and part selection. Expand **Scenario and topology** or **Addressing tables** when you need them. Printing and customization are under **Print, customize or start over**.
+Practice Cisco IOS commands in a forest-green console. In **Drills → Practice topic → Missed commands**, a correct first try clears the command from your saved review queue. In **Labs** (the Packet Tracer labs), use **Change lab** for lab and part selection. Expand **Scenario and topology** or **Addressing tables** when you need them. Printing and customization are under **Print, customize or start over**.
 
 **Practice Cisco IOS commands on a simulated router and switch, in your browser.**
 
@@ -23,6 +23,9 @@ Works in any modern browser on desktop, tablet or phone. No install, no account,
 
 ## Features
 
+### Layout
+The header is one line: the name, and a book button for the cheat sheet. The sections are **Path, Drills, Tasks, Labs and Sandbox**: a row of tabs under the header on a computer, a bar along the bottom of the screen on a phone.
+
 ### Learning path (start here)
 A fresh visit opens on the **Path**: eight units in the order you'd learn them on a real device. Modes, first-time setup, passwords, interfaces, checking your work, saving and resetting, SSH, then hardening logins. One big button always shows what to do next.
 
@@ -40,7 +43,7 @@ One job at a time: the drill names a task ("Give this interface the address 192.
 - **A real command that does the wrong thing** gets told what it would do instead.
 - 45 drills in 8 topics: Modes, Basic setup, Passwords, Interfaces, SSH, Security, Save & reset, Verify. Pick a topic or mix them all. Values are random every time, and missed drills come back a few questions later.
 - **Hint** first shows the command's shape with the values left as placeholders (`ip address <address> <mask>`); only then does it become **Show answer**. Either one ends the streak, scores nothing, and brings the drill back a few questions later.
-- Streak, best streak and accuracy are saved in your browser.
+- Streak, best streak and accuracy are shown at the top of each drill and saved in your browser. The Tasks tab shows how many tasks you've finished.
 
 ![Feedback on a mistyped command in the command console](docs/drills.png)
 
@@ -131,6 +134,7 @@ For 11.7.5, `lab` is the /24 network, `hosts` the addresses each LAN needs, and 
 A factory-fresh router, switch and PC cabled together, with no goals and no score.
 
 ### Cheat sheet
+Open it from the book button at the top right of the page.
 The commands from the drills and tasks in one page, grouped by topic, with the prompt each one is typed at.
 
 <p align="center"><img src="docs/phone.png" width="300" alt="Basic router setup with phone console controls"></p>

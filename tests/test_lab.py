@@ -25,7 +25,7 @@ with sync_playwright() as pw:
     b=pw.chromium.launch(); pg=b.new_page(viewport={'width':1300,'height':1000}); errs=[]; pg.on('pageerror',lambda e:errs.append(str(e)))
     pg.goto(URL); pg.evaluate("localStorage.clear()"); pg.goto(URL+CLASS); pg.wait_for_timeout(400)
     print('The class lab (11.7.5: 192.168.100.0/24, 25 hosts per LAN)')
-    ok(pg.is_visible('#v-lab') and pg.locator('.tab.on').inner_text()=='Packet Tracer lab','a lab link opens the Packet Tracer lab tab')
+    ok(pg.is_visible('#v-lab') and pg.locator('.tab.on').inner_text().startswith('Labs'),'a lab link opens the Labs tab')
     A=dict(zip(labels(pg),answers(pg)))
     ok([A[k] for k in ['a. Based on the topology, how many subnets are needed?','b. How many bits must be borrowed to support that many subnets?','c. How many subnets does this create?','d. How many usable hosts does this create per subnet?']]==['5','3','8','30'],'Step 1 a–d: 5 subnets, 3 bits, 8 subnets, 30 hosts')
     ok([A[f'e. Subnet {k} last octet in binary'] for k in (2,3,4)]==['01000000','01100000','10000000'] and A['f. New subnet mask in decimal']=='255.255.255.224','binary subnet values and the /27 mask')

@@ -311,6 +311,33 @@ header .row{gap:10px}header .sister{color:#294b35;background:transparent;border-
 @media(max-width:700px){body.pl-focus .app>header,body.pl-focus .tabs{display:none}.pl-run .pl-bars{display:none}}
 @media(prefers-reduced-motion:reduce){.pl-prog i{transition:none}}
 @media print{#v-path{display:none!important}}
+
+/* ---------- simplified header and tabs ---------- */
+.app>header{flex-wrap:nowrap;align-items:center;justify-content:space-between;padding:8px 0 12px;margin-bottom:0}
+.app>header h1{font-size:clamp(26px,3.4vw,40px)}
+.hcheat{display:inline-flex;align-items:center;gap:7px;flex:none;background:transparent;border:1px solid #9cae9d;border-radius:6px;color:#294b35;padding:8px 12px;font:600 14px var(--mono);min-height:40px}
+.hcheat:hover,.hcheat.on{background:#203e2e;color:#f7faed;border-color:#203e2e}
+.tabs{flex-wrap:nowrap;gap:4px}
+.tabs .tab{display:inline-flex;align-items:center;gap:6px;position:relative}
+.tabs .tic{flex:none}
+.tbadge{font:600 11px var(--mono);font-style:normal;padding:1px 6px;border-radius:999px;background:#dfe5d6;color:#304734}
+.tab.on .tbadge{background:#ffffff26;color:inherit}
+.dstat{display:flex;gap:14px;flex-wrap:wrap}.dstat b{font-family:var(--mono)}
+@media(max-width:700px){
+  .app>header .sub{display:none}
+  .app>header{padding:4px 0 8px;border-bottom-width:1px}
+  .app>header h1{font-size:26px;gap:8px}
+  .hcheat span{display:none}.hcheat{padding:8px;min-width:44px;justify-content:center}
+  /* the sections become a bar along the bottom of the screen */
+  .tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;margin:0;padding:4px 4px calc(4px + env(safe-area-inset-bottom));gap:0;background:#f6f4ec;border-top:1px solid #b1bcad;box-shadow:0 -4px 14px #1b2b2214;flex-wrap:nowrap;overflow:visible}
+  .tabs .tab{flex:1 1 0;min-width:0;flex-direction:column;justify-content:center;gap:2px;border:0;background:transparent;border-radius:8px;padding:6px 2px;min-height:54px;font-size:11.5px;color:#4b5d50}
+  .tabs .tab .tic{width:22px;height:22px}
+  .tabs .tab.on{background:#203e2e;color:#f7faed;box-shadow:none}
+  .tbadge{position:absolute;top:0;right:calc(50% - 32px);font-size:9.5px;padding:0 4px}
+  body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
+  body.pl-focus{padding-bottom:0}
+}
+@media print{.hcheat{display:none!important}}
 </style>
 </head>
 <body>
@@ -320,22 +347,14 @@ header .row{gap:10px}header .sister{color:#294b35;background:transparent;border-
       <h1><img class="brand-mark" src="icon.svg?v=2" alt=""><span class="cur">No&nbsp;<span>Shutdown</span></span><button class="install" id="installBtn" hidden><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></span>Install app</button></h1>
       <div class="sub">Practice Cisco IOS commands on simulated routers and switches.</div>
     </div>
-    <div class="row">
-
-      <div class="stats" aria-live="polite">
-        <div class="stat"><b id="sStreak">0</b><small>Streak</small></div>
-        <div class="stat"><b id="sAcc">–</b><small>Drill acc.</small></div>
-        <div class="stat"><b id="sTasks">0</b><small>Tasks done</small></div>
-      </div>
-    </div>
+    <button class="hcheat" id="cheatBtn" type="button" data-v="cheat" aria-label="Cheat sheet" title="Cheat sheet"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5q5-2 9 1 4-3 9-1v14q-5-2-9 0-4-2-9 0z M12 6v13"/></svg><span>Cheat sheet</span></button>
   </header>
   <nav class="tabs" id="tabs" aria-label="Sections">
-    <button class="tab" data-v="path"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h6a4 4 0 0 0 0-8h-4a4 4 0 0 1 0-8h6"/></svg>Path</button>
-    <button class="tab" data-v="drills"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M4 6l6 6-6 6m9 0h7"/></svg>Drills</button>
-    <button class="tab" data-v="tasks"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M5 5h14v14H5z M8 10l2 2 4-5"/></svg>Tasks</button>
-    <button class="tab" data-v="lab"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M4 4h6v6H4z M14 14h6v6h-6z M7 10v7h7"/></svg>Packet Tracer lab</button>
-    <button class="tab" data-v="sandbox"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M4 7l8-4 8 4-8 4z M4 7v10l8 4 8-4V7 M12 11v10"/></svg>Sandbox</button>
-    <button class="tab" data-v="cheat"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M3 5q5-2 9 1 4-3 9-1v14q-5-2-9 0-4-2-9 0z M12 6v13"/></svg>Cheat sheet</button>
+    <button class="tab" data-v="path"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="tic"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h6a4 4 0 0 0 0-8h-4a4 4 0 0 1 0-8h6"/></svg><span class="tl">Path</span></button>
+    <button class="tab" data-v="drills"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="tic"><path d="M4 6l6 6-6 6m9 0h7"/></svg><span class="tl">Drills</span></button>
+    <button class="tab" data-v="tasks"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="tic"><path d="M5 5h14v14H5z M8 10l2 2 4-5"/></svg><span class="tl">Tasks</span><em class="tbadge" id="sTasks" aria-label="tasks done">0/13</em></button>
+    <button class="tab" data-v="lab"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="tic"><path d="M4 4h6v6H4z M14 14h6v6h-6z M7 10v7h7"/></svg><span class="tl">Labs</span></button>
+    <button class="tab" data-v="sandbox"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="tic"><path d="M4 7l8-4 8 4-8 4z M4 7v10l8 4 8-4V7 M12 11v10"/></svg><span class="tl">Sandbox</span></button>
   </nav>
   <main>
     <section id="v-path" class="card pathv" hidden aria-label="Learning path"></section>

@@ -24,7 +24,8 @@ const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(M
 
 /* ---------------- stats ---------------- */
 const S={drill:store.get('ns_drill',{right:0,tried:0,streak:0,best:0}),tasks:store.get('ns_tasks',{}),labs:store.get('ns_labs',0)};
-function renderStats(){$('#sStreak').textContent=S.drill.streak;$('#sAcc').textContent=S.drill.tried?Math.round(100*S.drill.right/S.drill.tried)+'%':'–';
+// streak and accuracy live in the Drills view, tasks done in a badge on the Tasks tab
+function renderStats(){const st=$('#sStreak'),ac=$('#sAcc');if(st)st.textContent=S.drill.streak;if(ac)ac.textContent=S.drill.tried?Math.round(100*S.drill.right/S.drill.tried)+'%':'–';
   $('#sTasks').textContent=`${Object.values(S.tasks).filter(t=>t.done).length}/${CS.TASKS.length}`;}
 
 /* ---------------- a terminal attached to one device ---------------- */
@@ -94,7 +95,7 @@ function PCPanel(pc,net,onChange){
 /* ---------------- views ---------------- */
 let view=null;
 function go(v,arg){
-  view=v;$$('#tabs .tab').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  view=v;$$('#tabs .tab').forEach(b=>b.classList.toggle('on',b.dataset.v===v));$('#cheatBtn').classList.toggle('on',v==='cheat');
   ['path','drills','tasks','lab','sandbox','cheat'].forEach(k=>{$('#v-'+k).hidden=k!==v;});
   document.body.classList.toggle('pl-focus',false);
   if(v!=='drills'&&Drills.inSession)Drills.endSession();
@@ -105,6 +106,7 @@ function go(v,arg){
   if(v==='sandbox')Sandbox.start();
   if(v==='cheat')Cheat.render();
 }
+$('#cheatBtn').onclick=()=>{try{history.replaceState(null,'',location.pathname+'?tab=cheat');}catch(e){}store.set('ns_tab','cheat');go('cheat');};
 $$('#tabs .tab').forEach(b=>b.onclick=()=>{try{history.replaceState(null,'',location.pathname+(b.dataset.v==='path'?'':'?tab='+b.dataset.v));}catch(e){}store.set('ns_tab',b.dataset.v);if(b.dataset.v==='drills'&&Drills.inSession)Drills.endSession();go(b.dataset.v);});
 
 /* ---------------- drills ---------------- */
@@ -153,7 +155,7 @@ const Drills=(()=>{
     const inp=el('input',{id:'din',autocomplete:'off',autocapitalize:'off',autocorrect:'off',spellcheck:'false','aria-label':'Your command',enterkeyhint:'go',placeholder:'type the command'});
     const fb=el('div',{class:'dfb',id:'dfb','aria-live':'polite'});
     const check=el('button',{class:'btn primary',type:'button',text:'Check'}),showB=el('button',{class:'btn',type:'button',text:'Hint'}),skip=el('button',{class:'btn ghost',type:'button',text:'Skip'});
-    root.append(sess?sess.strip(cur):el('div',{class:'dmeta'},el('span',{text:`${dr.g} · ${dr.dev==='pc'?'PC':dr.dev==='router'?'router':'switch'}`}),el('span',{text:`Streak ${S.drill.streak} · best ${S.drill.best}`})),sess?'':chips,
+    root.append(sess?sess.strip(cur):el('div',{class:'dmeta'},el('span',{text:`${dr.g} · ${dr.dev==='pc'?'PC':dr.dev==='router'?'router':'switch'}`}),el('span',{class:'dstat'},el('span',null,'Streak ',el('b',{id:'sStreak',text:String(S.drill.streak)}),` · best ${S.drill.best}`),el('span',null,'Right ',el('b',{id:'sAcc',text:S.drill.tried?Math.round(100*S.drill.right/S.drill.tried)+'%':'–'})))),sess?'':chips,
       el('div',{class:'dpurpose',id:'dq',text:txt(dr.purpose,v)}),
       el('div',{class:'dbox'},el('span',{class:'tp',text:IOS.prompt(dev)}),inp),fb,el('div',{class:'dacts'},check,showB,skip),
       el('p',{class:'dim',style:'font-size:13px;margin-top:14px',text:'Any abbreviation IOS would accept counts (conf t, int g0/0, no shut…). Tab completes a partial command. When there is nothing to complete, Tab moves to the next control.'}));
